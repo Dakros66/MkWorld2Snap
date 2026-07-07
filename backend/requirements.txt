@@ -1,6 +1,6 @@
 # MkWorld2Snap local API runtime
 fastapi==0.136.1
-pydantic==2.9.2
+pydantic==2.12.5
 python-multipart==0.0.29
 pyyaml==6.0.2
-uvicorn[standard]==0.47.0
+uvicorn==0.47.0

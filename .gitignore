@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv-universal2/
+.venv-win/
 .pytest_cache/
 .coverage
 htmlcov/
@@ -18,6 +20,16 @@ build/
 dist/
 .pyinstaller-cache/
 desktop_data/
+
+# packaged release outputs
+release/
+releases/
+*.dmg
+*.pkg
+*.msi
+*.app.zip
+*.tar.gz
+*.tar.xz
 
 # runtime
 tmp/*

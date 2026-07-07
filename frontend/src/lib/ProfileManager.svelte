@@ -63,6 +63,12 @@
       error = err instanceof Error ? err.message : String(err);
     }
   }
+
+  function profileLocationLabel(profile: ProfileDescriptor): string {
+    return profile.source === 'user'
+      ? $tr('Stored in imported profiles')
+      : $tr('Stored in bundled U1 profiles');
+  }
 </script>
 
 <section class="profile-manager card card-padded" aria-label={$tr('U1 profile manager')}>
@@ -109,7 +115,7 @@
       <article class="profile-row" class:user={profile.source === 'user'}>
         <div class="profile-copy">
           <strong>{profile.display_name}</strong>
-          <span title={profile.path}>{profile.path}</span>
+          <span>{profileLocationLabel(profile)}</span>
         </div>
         <div class="profile-tags">
           <span>{profile.source === 'user' ? $tr('Imported') : $tr('Bundled')}</span>

@@ -1,8 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+import sys
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(SPECPATH)
+IS_MACOS = sys.platform == "darwin"
+IS_WINDOWS = sys.platform.startswith("win")
+MAC_ICON = PROJECT_ROOT / "assets" / "app-icon.icns"
+WINDOWS_ICON = PROJECT_ROOT / "assets" / "app-icon.ico"
+TARGET_ARCH = os.environ.get("PYINSTALLER_TARGET_ARCH") if IS_MACOS else None
+if IS_MACOS and not TARGET_ARCH:
+    TARGET_ARCH = "universal2"
 
 
 def collect_tree(source: str, target: str):
@@ -72,9 +81,10 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch=TARGET_ARCH,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(WINDOWS_ICON) if IS_WINDOWS and WINDOWS_ICON.exists() else None,
 )
 coll = COLLECT(
     exe,
@@ -85,13 +95,15 @@ coll = COLLECT(
     upx_exclude=[],
     name="MkWorld2Snap",
 )
-app = BUNDLE(
-    coll,
-    name="MkWorld2Snap.app",
-    icon=None,
-    bundle_identifier="local.mkworld2snap.app",
-    info_plist={
-        "NSHighResolutionCapable": "True",
-        "NSRequiresAquaSystemAppearance": "False",
-    },
-)
+
+if IS_MACOS:
+    app = BUNDLE(
+        coll,
+        name="MkWorld2Snap.app",
+        icon=str(MAC_ICON) if MAC_ICON.exists() else None,
+        bundle_identifier="local.mkworld2snap.app",
+        info_plist={
+            "NSHighResolutionCapable": "True",
+            "NSRequiresAquaSystemAppearance": "False",
+        },
+    )

@@ -269,15 +269,34 @@ Then open:
 http://localhost:8084
 ```
 
-## macOS Packaging
+## Desktop Packaging
 
 ```bash
 ./scripts/build_desktop_macos.sh
 open dist/MkWorld2Snap.app
 ```
 
-The project also includes `MkWorld2Snap.spec` for PyInstaller-based desktop
-builds.
+The macOS script builds a Universal 2 app for Apple Silicon and Intel Macs. It
+uses a separate `.venv-universal2` environment and writes:
+
+```text
+dist/MkWorld2Snap.app
+```
+
+Windows packaging is prepared through:
+
+```bat
+scripts\build_desktop_windows.bat
+```
+
+That script writes:
+
+```text
+dist\MkWorld2Snap\MkWorld2Snap.exe
+```
+
+Both scripts use `MkWorld2Snap.spec`, the generated frontend bundle, the bundled
+U1 profiles, the recipe folder, and the app icons in `assets/`.
 
 ## Project Layout
 
