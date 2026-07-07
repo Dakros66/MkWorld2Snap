@@ -1,0 +1,26 @@
+services:
+  mkworld2snap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8080"
+    volumes:
+      - ./target_profiles:/app/target_profiles
+      - ./profiles:/app/profiles:ro
+      - ./rules:/app/rules
+      - ./tmp_failed:/app/tmp_failed
+      - ./tmp:/app/tmp
+      - ./user_profiles:/app/user_profiles
+    environment:
+      CLEANUP_TEMP_AFTER_SECONDS: "${CLEANUP_TEMP_AFTER_SECONDS:-300}"
+      DOMAINHOST: "${DOMAINHOST:-localhost}"
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-500}"
+      RETAIN_FAILED_FILES: "${RETAIN_FAILED_FILES:-false}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/engine/ping')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

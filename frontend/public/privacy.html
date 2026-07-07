@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Privacy | MkWorld2Snap</title>
+  <meta name="description" content="Privacy notes for MkWorld2Snap project files and app data." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <style>
+    :root {
+      --bg: #fff8ee;
+      --bg-elev: #fffdf8;
+      --bg-soft: #f4efe5;
+      --ink: #182f2a;
+      --text: #1f2c2a;
+      --text-muted: #65756f;
+      --border: #d6ddd3;
+      --accent: #ff6540;
+      --sun: #ffd25a;
+      --mint: #9ce9c2;
+      --teal: #0f9f92;
+      --shadow: 0 18px 44px rgba(25, 35, 32, .13);
+      --radius: 18px;
+      --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color-scheme: light;
+    }
+    :root[data-theme="dark"] {
+      --bg: #111816;
+      --bg-elev: #18211f;
+      --bg-soft: #212c29;
+      --ink: #f6f4ea;
+      --text: #f5f7f1;
+      --text-muted: #b4c0bb;
+      --border: #33433e;
+      --accent: #ff8a68;
+      --sun: #f6c84f;
+      --mint: #6fdca6;
+      --teal: #37c2b4;
+      --shadow: 0 20px 54px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(116deg, rgba(95, 190, 223, .13) 0 18%, transparent 18% 45%, rgba(255, 210, 90, .24) 45% 62%, transparent 62%),
+        linear-gradient(180deg, color-mix(in srgb, var(--mint) 18%, transparent), transparent 42%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(color-mix(in srgb, var(--text) 8%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--text) 8%, transparent) 1px, transparent 1px);
+      background-size: 34px 34px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.32), transparent 62%);
+    }
+    a { color: var(--accent); text-decoration: none; font-weight: 850; }
+    a:hover { color: color-mix(in srgb, var(--accent) 82%, var(--ink)); text-decoration: underline; }
+    code {
+      font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+      font-size: .92em;
+      background: var(--bg-soft);
+      padding: 1px 6px;
+      border-radius: 5px;
+      color: var(--text);
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 10px 28px;
+      border-bottom: 2px solid var(--border);
+      background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 0 color-mix(in srgb, var(--mint) 30%, transparent);
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .brand:hover { color: var(--text); text-decoration: none; }
+    .mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      padding: 8px;
+      background: var(--ink);
+      box-shadow: 0 5px 0 var(--sun);
+      transform: rotate(-2deg);
+    }
+    .mark span { border-radius: 5px; }
+    .mark span:nth-child(1) { background: var(--sun); }
+    .mark span:nth-child(2) { background: var(--mint); }
+    .mark span:nth-child(3) { grid-column: 1 / -1; background: #ff8aa0; }
+    .brand-copy strong { display: block; font-size: 18px; line-height: 1; font-weight: 950; }
+    .brand-copy span {
+      display: block;
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .pill,
+    select,
+    button {
+      min-height: 36px;
+      border-radius: 999px;
+      border: 2px solid var(--border);
+      background: var(--bg-elev);
+      color: var(--text);
+      font: inherit;
+      font-weight: 850;
+      padding: 7px 13px;
+    }
+    select { padding-right: 34px; }
+    button { cursor: pointer; }
+    button:hover, .pill:hover {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+      text-decoration: none;
+    }
+
+    main {
+      position: relative;
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: clamp(28px, 4vw, 56px) 0 72px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr);
+      gap: 28px;
+      align-items: stretch;
+      margin-bottom: 24px;
+    }
+    .hero-main {
+      padding: clamp(24px, 4vw, 42px);
+      border: 2px solid var(--border);
+      border-radius: 24px;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--sun) 26%, transparent), transparent 48%),
+        var(--bg-elev);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 950;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    h1 {
+      margin: 0;
+      max-width: 760px;
+      font-size: clamp(34px, 6vw, 72px);
+      line-height: .92;
+      font-weight: 950;
+      letter-spacing: 0;
+    }
+    .lead {
+      max-width: 740px;
+      margin: 18px 0 0;
+      color: var(--text-muted);
+      font-size: clamp(16px, 2vw, 20px);
+      line-height: 1.45;
+    }
+    .status-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 24px;
+      border: 2px solid var(--border);
+      border-radius: 24px;
+      background:
+        linear-gradient(145deg, color-mix(in srgb, var(--mint) 28%, transparent), transparent 58%),
+        var(--bg-elev);
+      box-shadow: var(--shadow);
+    }
+    .status-card strong { display: block; font-size: 18px; line-height: 1.1; }
+    .status-card p { margin: 7px 0 0; color: var(--text-muted); }
+    .status-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .status-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-weight: 780;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--teal) 18%, transparent);
+      flex: 0 0 auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .card {
+      min-height: 190px;
+      padding: 22px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
+      box-shadow: 0 8px 20px rgba(25, 35, 32, .07);
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      line-height: 1.1;
+      font-weight: 950;
+    }
+    .card p {
+      margin: 0;
+      color: var(--text-muted);
+    }
+    .card p + p { margin-top: 10px; }
+    footer {
+      position: relative;
+      padding: 22px 24px 30px;
+      border-top: 2px solid var(--border);
+      background: color-mix(in srgb, var(--ink) 92%, #000);
+      color: #fffdf8;
+      text-align: center;
+      font-size: 12px;
+    }
+    footer a { color: #fffdf8; }
+
+    @media (max-width: 820px) {
+      .topbar { align-items: flex-start; padding: 12px 16px; }
+      .brand-copy span { display: none; }
+      main { width: min(100% - 24px, 1120px); padding-top: 22px; }
+      .hero, .grid { grid-template-columns: 1fr; }
+      h1 { font-size: clamp(34px, 12vw, 52px); }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="mark" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span class="brand-copy">
+        <strong>MkWorld2Snap</strong>
+        <span data-i18n="tagline">print file workshop</span>
+      </span>
+    </a>
+    <div class="top-actions">
+      <select id="language" aria-label="Language">
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="it">Italiano</option>
+        <option value="pt">Português</option>
+      </select>
+      <a class="pill" href="/" data-i18n="back">Back to workshop</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-main">
+        <p class="eyebrow" data-i18n="eyebrow">Privacy</p>
+        <h1 data-i18n="title">Your print files stay on this computer.</h1>
+        <p class="lead" data-i18n="lead">
+          MkWorld2Snap is designed as a local desktop tool. It prepares 3MF/STL projects for Snapmaker Orca without adding analytics, cloud upload, or remote tracking.
+        </p>
+      </div>
+      <aside class="status-card">
+        <div>
+          <strong data-i18n="summaryTitle">Quick summary</strong>
+          <p data-i18n="summaryText">The app reads only the files and folders you select, writes outputs where you choose, and keeps preferences locally.</p>
+        </div>
+        <ul class="status-list">
+          <li><span class="dot"></span><span data-i18n="summaryNoTelemetry">No telemetry</span></li>
+          <li><span class="dot"></span><span data-i18n="summaryLocal">Local processing</span></li>
+          <li><span class="dot"></span><span data-i18n="summaryChoice">You choose output paths</span></li>
+        </ul>
+      </aside>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2 data-i18n="telemetryTitle">No analytics or tracking</h2>
+        <p data-i18n="telemetryBody">MkWorld2Snap does not include usage analytics, telemetry exporters, tracking pixels, cloud beacons, or remote statistics collection.</p>
+      </article>
+
+      <article class="card">
+        <h2 data-i18n="filesTitle">Project files</h2>
+        <p data-i18n="filesBody1">Files you choose are read by the local engine to inspect geometry, print settings, filament data, thumbnails, and slicer metadata.</p>
+        <p data-i18n="filesBody2">Converted files are saved only when you choose a path in the save dialog or when automatic conversion writes into <code>OUTPUT_U1</code> inside a watched folder.</p>
+      </article>
+
+      <article class="card">
+        <h2 data-i18n="temporaryTitle">Temporary working data</h2>
+        <p data-i18n="temporaryBody">During conversion the app may create temporary files so the rebuilt package can be previewed and saved. Those files are short-lived working data, not a permanent project library.</p>
+      </article>
+
+      <article class="card">
+        <h2 data-i18n="foldersTitle">Watched folders</h2>
+        <p data-i18n="foldersBody">Automatic conversion only scans the folders you add. It looks for supported model files and writes converted outputs to the matching <code>OUTPUT_U1</code> folder.</p>
+      </article>
+
+      <article class="card">
+        <h2 data-i18n="prefsTitle">Preferences stored locally</h2>
+        <p data-i18n="prefsBody">The app window may use browser-style <code>localStorage</code> to remember language, theme, and workflow preferences. It is not used to store model contents or personal information.</p>
+      </article>
+
+      <article class="card">
+        <h2 data-i18n="autostartTitle">Start with computer</h2>
+        <p data-i18n="autostartBody">If you enable start with computer, the app creates the operating-system startup entry needed to open MkWorld2Snap after login. You can disable it from the app.</p>
+      </article>
+
+      <article class="card">
+        <h2 data-i18n="ownershipTitle">Model ownership</h2>
+        <p data-i18n="ownershipBody">Use files you have the right to modify. MkWorld2Snap prepares project packages only; models, designs, licenses, and attribution remain yours or their original owner’s.</p>
+      </article>
+
+      <article class="card">
+        <h2 data-i18n="networkTitle">Network access</h2>
+        <p data-i18n="networkBody">The desktop app serves its own local interface and talks to its local conversion engine. It does not need an external account to process files.</p>
+      </article>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>&copy; MkWorld2Snap</span>
+    <span>&nbsp;·&nbsp;</span>
+    <a href="/" data-i18n="back">Back to workshop</a>
+  </footer>
+
+  <script>
+    const dictionaries = {
+      en: {
+        tagline: 'print file workshop',
+        back: 'Back to workshop',
+        eyebrow: 'Privacy',
+        title: 'Your print files stay on this computer.',
+        lead: 'MkWorld2Snap is designed as a local desktop tool. It prepares 3MF/STL projects for Snapmaker Orca without adding analytics, cloud upload, or remote tracking.',
+        summaryTitle: 'Quick summary',
+        summaryText: 'The app reads only the files and folders you select, writes outputs where you choose, and keeps preferences locally.',
+        summaryNoTelemetry: 'No telemetry',
+        summaryLocal: 'Local processing',
+        summaryChoice: 'You choose output paths',
+        telemetryTitle: 'No analytics or tracking',
+        telemetryBody: 'MkWorld2Snap does not include usage analytics, telemetry exporters, tracking pixels, cloud beacons, or remote statistics collection.',
+        filesTitle: 'Project files',
+        filesBody1: 'Files you choose are read by the local engine to inspect geometry, print settings, filament data, thumbnails, and slicer metadata.',
+        filesBody2: 'Converted files are saved only when you choose a path in the save dialog or when automatic conversion writes into <code>OUTPUT_U1</code> inside a watched folder.',
+        temporaryTitle: 'Temporary working data',
+        temporaryBody: 'During conversion the app may create temporary files so the rebuilt package can be previewed and saved. Those files are short-lived working data, not a permanent project library.',
+        foldersTitle: 'Watched folders',
+        foldersBody: 'Automatic conversion only scans the folders you add. It looks for supported model files and writes converted outputs to the matching <code>OUTPUT_U1</code> folder.',
+        prefsTitle: 'Preferences stored locally',
+        prefsBody: 'The app window may use browser-style <code>localStorage</code> to remember language, theme, and workflow preferences. It is not used to store model contents or personal information.',
+        autostartTitle: 'Start with computer',
+        autostartBody: 'If you enable start with computer, the app creates the operating-system startup entry needed to open MkWorld2Snap after login. You can disable it from the app.',
+        ownershipTitle: 'Model ownership',
+        ownershipBody: 'Use files you have the right to modify. MkWorld2Snap prepares project packages only; models, designs, licenses, and attribution remain yours or their original owner’s.',
+        networkTitle: 'Network access',
+        networkBody: 'The desktop app serves its own local interface and talks to its local conversion engine. It does not need an external account to process files.',
+      },
+      es: {
+        tagline: 'taller de archivos de impresión',
+        back: 'Volver al taller',
+        eyebrow: 'Privacidad',
+        title: 'Tus archivos de impresión se quedan en este equipo.',
+        lead: 'MkWorld2Snap está diseñado como una herramienta local de escritorio. Prepara proyectos 3MF/STL para Snapmaker Orca sin añadir analíticas, subidas a la nube ni seguimiento remoto.',
+        summaryTitle: 'Resumen rápido',
+        summaryText: 'La app solo lee los archivos y carpetas que seleccionas, guarda las salidas donde tú eliges y conserva las preferencias localmente.',
+        summaryNoTelemetry: 'Sin telemetría',
+        summaryLocal: 'Procesamiento local',
+        summaryChoice: 'Tú eliges las rutas de salida',
+        telemetryTitle: 'Sin analíticas ni seguimiento',
+        telemetryBody: 'MkWorld2Snap no incluye analíticas de uso, exportadores de telemetría, píxeles de seguimiento, señales a la nube ni recogida remota de estadísticas.',
+        filesTitle: 'Archivos de proyecto',
+        filesBody1: 'Los archivos que eliges los lee el motor local para inspeccionar geometría, ajustes de impresión, datos de filamento, miniaturas y metadatos del laminador.',
+        filesBody2: 'Los archivos convertidos solo se guardan cuando eliges una ruta en el diálogo de guardado o cuando la conversión automática escribe en <code>OUTPUT_U1</code> dentro de una carpeta supervisada.',
+        temporaryTitle: 'Datos temporales de trabajo',
+        temporaryBody: 'Durante la conversión la app puede crear archivos temporales para previsualizar y guardar el paquete reconstruido. Son datos de trabajo de corta duración, no una biblioteca permanente de proyectos.',
+        foldersTitle: 'Carpetas supervisadas',
+        foldersBody: 'La conversión automática solo escanea las carpetas que añades. Busca archivos de modelo compatibles y escribe las salidas convertidas en la carpeta <code>OUTPUT_U1</code> correspondiente.',
+        prefsTitle: 'Preferencias guardadas localmente',
+        prefsBody: 'La ventana de la app puede usar <code>localStorage</code>, como un navegador, para recordar idioma, tema y preferencias de flujo de trabajo. No se usa para guardar contenido de modelos ni información personal.',
+        autostartTitle: 'Iniciar con el equipo',
+        autostartBody: 'Si activas el inicio con el equipo, la app crea la entrada de arranque del sistema operativo necesaria para abrir MkWorld2Snap al iniciar sesión. Puedes desactivarlo desde la app.',
+        ownershipTitle: 'Propiedad de los modelos',
+        ownershipBody: 'Usa archivos que tengas derecho a modificar. MkWorld2Snap solo prepara paquetes de proyecto; los modelos, diseños, licencias y atribuciones siguen siendo tuyos o de su propietario original.',
+        networkTitle: 'Acceso de red',
+        networkBody: 'La app de escritorio sirve su propia interfaz local y se comunica con su motor de conversión local. No necesita una cuenta externa para procesar archivos.',
+      },
+      fr: {
+        tagline: 'atelier de fichiers d’impression',
+        back: 'Retour à l’atelier',
+        eyebrow: 'Confidentialité',
+        title: 'Vos fichiers d’impression restent sur cet ordinateur.',
+        lead: 'MkWorld2Snap est conçu comme un outil de bureau local. Il prépare les projets 3MF/STL pour Snapmaker Orca sans ajouter d’analytique, d’envoi vers le cloud ni de suivi distant.',
+        summaryTitle: 'Résumé rapide',
+        summaryText: 'L’application lit uniquement les fichiers et dossiers que vous sélectionnez, écrit les sorties où vous le décidez et conserve les préférences localement.',
+        summaryNoTelemetry: 'Aucune télémétrie',
+        summaryLocal: 'Traitement local',
+        summaryChoice: 'Vous choisissez les chemins de sortie',
+        telemetryTitle: 'Aucune analytique ni suivi',
+        telemetryBody: 'MkWorld2Snap n’inclut pas d’analytique d’utilisation, d’export de télémétrie, de pixel de suivi, de signal cloud ni de collecte distante de statistiques.',
+        filesTitle: 'Fichiers projet',
+        filesBody1: 'Les fichiers que vous choisissez sont lus par le moteur local pour inspecter la géométrie, les réglages d’impression, les données de filament, les miniatures et les métadonnées du trancheur.',
+        filesBody2: 'Les fichiers convertis sont enregistrés uniquement lorsque vous choisissez un chemin dans la boîte de dialogue, ou lorsque la conversion automatique écrit dans <code>OUTPUT_U1</code> dans un dossier surveillé.',
+        temporaryTitle: 'Données temporaires de travail',
+        temporaryBody: 'Pendant la conversion, l’application peut créer des fichiers temporaires afin de prévisualiser et d’enregistrer le paquet reconstruit. Ce sont des données de travail de courte durée, pas une bibliothèque permanente de projets.',
+        foldersTitle: 'Dossiers surveillés',
+        foldersBody: 'La conversion automatique analyse uniquement les dossiers que vous ajoutez. Elle cherche les fichiers de modèle compatibles et écrit les sorties converties dans le dossier <code>OUTPUT_U1</code> correspondant.',
+        prefsTitle: 'Préférences stockées localement',
+        prefsBody: 'La fenêtre de l’application peut utiliser <code>localStorage</code>, comme un navigateur, pour mémoriser la langue, le thème et les préférences de workflow. Il n’est pas utilisé pour stocker le contenu des modèles ni des informations personnelles.',
+        autostartTitle: 'Démarrer avec l’ordinateur',
+        autostartBody: 'Si vous activez le démarrage avec l’ordinateur, l’application crée l’entrée de démarrage du système nécessaire pour ouvrir MkWorld2Snap après la connexion. Vous pouvez la désactiver depuis l’application.',
+        ownershipTitle: 'Propriété des modèles',
+        ownershipBody: 'Utilisez des fichiers que vous avez le droit de modifier. MkWorld2Snap prépare uniquement des paquets projet ; les modèles, conceptions, licences et attributions restent les vôtres ou ceux de leur propriétaire d’origine.',
+        networkTitle: 'Accès réseau',
+        networkBody: 'L’application de bureau sert sa propre interface locale et communique avec son moteur de conversion local. Aucun compte externe n’est nécessaire pour traiter les fichiers.',
+      },
+      it: {
+        tagline: 'laboratorio file di stampa',
+        back: 'Torna al laboratorio',
+        eyebrow: 'Privacy',
+        title: 'I tuoi file di stampa restano su questo computer.',
+        lead: 'MkWorld2Snap è progettato come strumento desktop locale. Prepara progetti 3MF/STL per Snapmaker Orca senza aggiungere analytics, caricamenti cloud o tracciamento remoto.',
+        summaryTitle: 'Riepilogo rapido',
+        summaryText: 'L’app legge solo file e cartelle che selezioni, salva le uscite dove scegli tu e mantiene le preferenze in locale.',
+        summaryNoTelemetry: 'Nessuna telemetria',
+        summaryLocal: 'Elaborazione locale',
+        summaryChoice: 'Scegli tu i percorsi di uscita',
+        telemetryTitle: 'Nessuna analytics o tracciamento',
+        telemetryBody: 'MkWorld2Snap non include analytics d’uso, esportatori di telemetria, pixel di tracciamento, segnali cloud o raccolta remota di statistiche.',
+        filesTitle: 'File progetto',
+        filesBody1: 'I file che scegli vengono letti dal motore locale per ispezionare geometria, impostazioni di stampa, dati filamento, miniature e metadati dello slicer.',
+        filesBody2: 'I file convertiti vengono salvati solo quando scegli un percorso nella finestra di salvataggio o quando la conversione automatica scrive in <code>OUTPUT_U1</code> dentro una cartella monitorata.',
+        temporaryTitle: 'Dati temporanei di lavoro',
+        temporaryBody: 'Durante la conversione l’app può creare file temporanei per visualizzare in anteprima e salvare il pacchetto ricostruito. Sono dati di lavoro di breve durata, non una libreria permanente di progetti.',
+        foldersTitle: 'Cartelle monitorate',
+        foldersBody: 'La conversione automatica analizza solo le cartelle che aggiungi. Cerca file modello supportati e scrive le uscite convertite nella cartella <code>OUTPUT_U1</code> corrispondente.',
+        prefsTitle: 'Preferenze salvate in locale',
+        prefsBody: 'La finestra dell’app può usare <code>localStorage</code>, come un browser, per ricordare lingua, tema e preferenze di lavoro. Non viene usato per salvare contenuti dei modelli o informazioni personali.',
+        autostartTitle: 'Avvia con il computer',
+        autostartBody: 'Se abiliti l’avvio con il computer, l’app crea la voce di avvio del sistema operativo necessaria per aprire MkWorld2Snap dopo il login. Puoi disabilitarla dall’app.',
+        ownershipTitle: 'Proprietà dei modelli',
+        ownershipBody: 'Usa file che hai il diritto di modificare. MkWorld2Snap prepara solo pacchetti progetto; modelli, design, licenze e attribuzioni restano tuoi o del proprietario originale.',
+        networkTitle: 'Accesso di rete',
+        networkBody: 'L’app desktop serve la propria interfaccia locale e comunica con il proprio motore di conversione locale. Non richiede un account esterno per elaborare i file.',
+      },
+      pt: {
+        tagline: 'bancada de ficheiros de impressão',
+        back: 'Voltar à bancada',
+        eyebrow: 'Privacidade',
+        title: 'Os seus ficheiros de impressão ficam neste computador.',
+        lead: 'O MkWorld2Snap foi concebido como uma ferramenta local de ambiente de trabalho. Prepara projetos 3MF/STL para o Snapmaker Orca sem adicionar análises, envio para a nuvem ou rastreio remoto.',
+        summaryTitle: 'Resumo rápido',
+        summaryText: 'A app lê apenas os ficheiros e pastas que seleciona, grava as saídas onde escolher e mantém as preferências localmente.',
+        summaryNoTelemetry: 'Sem telemetria',
+        summaryLocal: 'Processamento local',
+        summaryChoice: 'Escolhe os caminhos de saída',
+        telemetryTitle: 'Sem análises nem rastreio',
+        telemetryBody: 'O MkWorld2Snap não inclui análises de utilização, exportadores de telemetria, píxeis de rastreio, sinais para a nuvem nem recolha remota de estatísticas.',
+        filesTitle: 'Ficheiros de projeto',
+        filesBody1: 'Os ficheiros que escolhe são lidos pelo motor local para inspecionar geometria, definições de impressão, dados de filamento, miniaturas e metadados do fatiador.',
+        filesBody2: 'Os ficheiros convertidos só são guardados quando escolhe um caminho na janela de gravação ou quando a conversão automática escreve em <code>OUTPUT_U1</code> dentro de uma pasta monitorizada.',
+        temporaryTitle: 'Dados temporários de trabalho',
+        temporaryBody: 'Durante a conversão, a app pode criar ficheiros temporários para pré-visualizar e guardar o pacote reconstruído. São dados de trabalho de curta duração, não uma biblioteca permanente de projetos.',
+        foldersTitle: 'Pastas monitorizadas',
+        foldersBody: 'A conversão automática analisa apenas as pastas que adiciona. Procura ficheiros de modelo suportados e escreve as saídas convertidas na pasta <code>OUTPUT_U1</code> correspondente.',
+        prefsTitle: 'Preferências guardadas localmente',
+        prefsBody: 'A janela da app pode usar <code>localStorage</code>, como um navegador, para recordar idioma, tema e preferências de trabalho. Não é usado para guardar conteúdo de modelos nem informação pessoal.',
+        autostartTitle: 'Iniciar com o computador',
+        autostartBody: 'Se ativar o início com o computador, a app cria a entrada de arranque do sistema operativo necessária para abrir o MkWorld2Snap após iniciar sessão. Pode desativá-la na app.',
+        ownershipTitle: 'Propriedade dos modelos',
+        ownershipBody: 'Use ficheiros que tem direito a modificar. O MkWorld2Snap apenas prepara pacotes de projeto; modelos, designs, licenças e atribuições continuam a ser seus ou do proprietário original.',
+        networkTitle: 'Acesso de rede',
+        networkBody: 'A app de ambiente de trabalho serve a sua própria interface local e comunica com o seu motor de conversão local. Não precisa de uma conta externa para processar ficheiros.',
+      },
+    };
+
+    const supported = Object.keys(dictionaries);
+    const languageSelect = document.getElementById('language');
+
+    function readStored(key) {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+
+    function writeStored(key, value) {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // The page still works if browser storage is unavailable.
+      }
+    }
+
+    function detectLanguage() {
+      const saved = readStored('mkworld2snap-locale');
+      if (supported.includes(saved)) return saved;
+      const pc = (navigator.language || 'en').slice(0, 2).toLowerCase();
+      return supported.includes(pc) ? pc : 'en';
+    }
+
+    function applyLanguage(lang) {
+      const dict = dictionaries[lang] || dictionaries.en;
+      document.documentElement.lang = lang;
+      document.title = `${dict.eyebrow} | MkWorld2Snap`;
+      document.querySelector('meta[name="description"]').setAttribute('content', dict.lead);
+      document.querySelectorAll('[data-i18n]').forEach((node) => {
+        const key = node.getAttribute('data-i18n');
+        if (dict[key]) node.innerHTML = dict[key];
+      });
+      languageSelect.value = lang;
+      writeStored('mkworld2snap-locale', lang);
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      writeStored('mkworld2snap-theme', theme);
+    }
+
+    const initialTheme = readStored('mkworld2snap-theme') || 'light';
+    applyTheme(initialTheme === 'dark' ? 'dark' : 'light');
+    applyLanguage(detectLanguage());
+
+    languageSelect.addEventListener('change', (event) => applyLanguage(event.target.value));
+  </script>
+</body>
+</html>

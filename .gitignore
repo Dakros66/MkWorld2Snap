@@ -1,0 +1,39 @@
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.svelte-kit/
+.pnpm-store/
+
+# desktop build
+build/
+dist/
+.pyinstaller-cache/
+desktop_data/
+
+# runtime
+tmp/*
+!tmp/.gitkeep
+outputs/
+tmp_failed/
+feedback/
+user_profiles/*
+!user_profiles/.gitkeep
+target_profiles/*
+!target_profiles/.gitkeep
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
+
+# local env — copy .env.example and customise; never commit real values
+.env

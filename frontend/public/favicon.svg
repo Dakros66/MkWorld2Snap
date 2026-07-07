@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="MkWorld2Snap">
+  <rect width="128" height="128" rx="22" fill="#12161b"/>
+  <path d="M16 82h96v19H16z" fill="#273038"/>
+  <path d="M30 82 20 101M52 82 42 101M74 82 64 101M96 82 86 101M19 91h89" stroke="#46535d" stroke-width="2"/>
+  <circle cx="31" cy="34" r="9" fill="#ff5e5b"/><circle cx="54" cy="23" r="9" fill="#23b785"/><circle cx="78" cy="36" r="9" fill="#5097ff"/><circle cx="97" cy="24" r="9" fill="#f7ca58"/>
+  <path d="M64 36 94 60 64 84 34 60z" fill="#e8eef2"/>
+  <path d="M64 46 82 60 64 74 46 60z" fill="#1c2228"/>
+  <path d="M31 44 64 50M54 33 64 50M78 46 64 50M97 34 64 50" stroke-linecap="round" stroke-width="4" fill="none" stroke="#e8eef2"/>
+  <path d="M31 44 64 50" stroke="#ff5e5b" stroke-width="3"/><path d="M54 33 64 50" stroke="#23b785" stroke-width="3"/><path d="M78 46 64 50" stroke="#5097ff" stroke-width="3"/><path d="M97 34 64 50" stroke="#f7ca58" stroke-width="3"/>
+  <path d="M64 74v17" stroke="#e8eef2" stroke-linecap="round" stroke-width="5"/>
+</svg>
