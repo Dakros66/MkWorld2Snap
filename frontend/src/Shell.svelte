@@ -369,6 +369,7 @@
         <span class="brand-copy">
           <span class="brand-name">MkWorld2Snap</span>
           <span class="brand-tag">{$tr('print file workshop')}</span>
+          <span class="brand-version">v1.0.0</span>
         </span>
       </button>
       <div class="wordmark-tooltip" role="tooltip">
@@ -425,6 +426,15 @@
     </nav>
 
     <div class="nav-right">
+      <div class="release-links" aria-label="Version and source">
+        <a
+          class="repo-link"
+          href="https://github.com/Dakros66/MkWorld2Snap"
+          target="_blank"
+          rel="noreferrer"
+          title="Dakros66/MkWorld2Snap"
+        >GitHub</a>
+      </div>
       <label class="language-picker" title={$tr('Language')}>
         <span class="sr-only">{$tr('Language')}</span>
         <select bind:value={$locale} aria-label={$tr('Language')}>
@@ -781,9 +791,12 @@
 <style>
   .layout {
     min-height: 100vh;
+    width: 100%;
+    max-width: 100vw;
     display: grid;
     grid-template-rows: auto 1fr auto;
     position: relative;
+    overflow-x: clip;
   }
   .layout::before {
     content: "";
@@ -963,6 +976,8 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    width: 100%;
+    max-width: 100vw;
     padding: 10px 24px;
     min-height: 70px;
     border-bottom: 2px solid var(--border-strong);
@@ -1003,6 +1018,7 @@
     background: transparent;
     border: none;
     padding: 6px 8px;
+    min-width: 0;
   }
   .wordmark:hover { background: transparent; }
   .brand-mark {
@@ -1024,11 +1040,21 @@
   .brand-copy { display: flex; flex-direction: column; line-height: 1.05; align-items: flex-start; }
   .brand-name { font-size: 16px; font-weight: 950; }
   .brand-tag { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 900; }
+  .brand-version {
+    margin-top: 2px;
+    color: var(--text-subtle);
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
 
   nav {
     display: flex;
     gap: 2px;
     min-width: 0;
+    flex: 1 1 auto;
+    overflow: visible;
   }
   .nav-link {
     display: inline-flex;
@@ -1042,6 +1068,7 @@
     border-radius: 999px;
     font-weight: 850;
     transition: color var(--duration), background var(--duration);
+    white-space: nowrap;
   }
   .nav-link:hover { background: color-mix(in srgb, var(--sun) 26%, var(--bg-elev)); color: var(--text); border-color: transparent; }
   .nav-link.active {
@@ -1061,8 +1088,34 @@
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     min-width: 0;
+    flex: 0 0 auto;
+  }
+  .release-links {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+    white-space: nowrap;
+  }
+  .repo-link {
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1;
+  }
+  .repo-link {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .repo-link:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
   }
   .icon-btn { padding: 6px 10px; font-size: 16px; border: none; }
   .desktop-tag-token {
@@ -1081,9 +1134,10 @@
   .language-picker {
     display: inline-flex;
     align-items: center;
+    flex: 0 0 auto;
   }
   .language-picker select {
-    width: auto;
+    width: 112px;
     min-height: 30px;
     padding: 4px 28px 4px 10px;
     border-radius: 999px;
@@ -1107,6 +1161,8 @@
   /* ---- main ---- */
   main {
     width: min(100%, var(--app-shell-max));
+    min-width: 0;
+    max-width: 100vw;
     margin: 0 auto;
     padding: clamp(16px, 3vw, 36px) clamp(14px, 3vw, 36px);
     position: relative;
@@ -1150,19 +1206,23 @@
     .forge-grid { grid-template-columns: 1fr; }
   }
 
-  @media (max-width: 1120px) {
-    .nav {
-      gap: 6px;
+  @media (max-width: 1540px) {
+    .nav-label-full {
+      display: none;
+    }
+    .nav-label-short {
+      display: inline;
     }
     .nav-link {
-      padding-inline: 9px;
+      padding-inline: 8px;
     }
-    .desktop-tag-token {
-      display: none;
+    .language-picker select { width: 104px; }
+    .release-links {
+      padding-inline: 7px;
     }
   }
 
-  @media (max-width: 880px) {
+  @media (max-width: 1360px) {
     .nav {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1190,6 +1250,8 @@
       grid-area: tabs;
       width: 100%;
       gap: 6px;
+      overflow: visible;
+      padding-bottom: 4px;
     }
     .nav-link {
       flex: 1 1 0;
@@ -1197,24 +1259,48 @@
       min-height: 36px;
       padding: 7px 10px;
     }
+    .nav-right {
+      grid-area: actions;
+      margin-left: 0;
+      justify-content: flex-end;
+      gap: 6px;
+      min-width: max-content;
+    }
+    .desktop-tag-token {
+      display: none;
+    }
+    .repo-link {
+      font-size: 10px;
+    }
+    .icon-btn {
+      min-width: 34px;
+      min-height: 34px;
+      padding: 6px 8px;
+    }
+  }
+
+  @media (max-width: 1180px) {
     .nav-label-full {
       display: none;
     }
     .nav-label-short {
       display: inline;
     }
-    .nav-right {
-      grid-area: actions;
-      margin-left: 0;
-      justify-content: flex-end;
+  }
+
+  @media (max-width: 880px) {
+    nav {
+      overflow-x: auto;
+      scrollbar-width: thin;
     }
-    .desktop-tag-token {
+    .nav-link {
+      flex: 1 0 max(96px, 20%);
+    }
+    .brand-tag {
       display: none;
     }
-    .icon-btn {
-      min-width: 34px;
-      min-height: 34px;
-      padding: 6px 8px;
+    .brand-version {
+      display: none;
     }
   }
 

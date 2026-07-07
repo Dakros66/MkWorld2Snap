@@ -68,37 +68,58 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name="MkWorld2Snap",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=TARGET_ARCH,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon=str(WINDOWS_ICON) if IS_WINDOWS and WINDOWS_ICON.exists() else None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name="MkWorld2Snap",
-)
+if IS_WINDOWS or IS_MACOS:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        [],
+        exclude_binaries=False,
+        name="MkWorld2Snap",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=TARGET_ARCH,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon=str(WINDOWS_ICON) if IS_WINDOWS and WINDOWS_ICON.exists() else None,
+    )
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="MkWorld2Snap",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=TARGET_ARCH,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name="MkWorld2Snap",
+    )
 
 if IS_MACOS:
     app = BUNDLE(
-        coll,
+        exe,
         name="MkWorld2Snap.app",
         icon=str(MAC_ICON) if MAC_ICON.exists() else None,
         bundle_identifier="local.mkworld2snap.app",

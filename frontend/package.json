@@ -2,7 +2,8 @@
   "private": true,
   "type": "module",
   "name": "mkworld2snap-frontend",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "packageManager": "pnpm@11.7.0",
   "description": "Desktop-first Svelte interface for MkWorld2Snap.",
   "engines": {
     "node": ">=22"

@@ -19,8 +19,9 @@ from typing import Any
 
 
 APP_NAME = "MkWorld2Snap"
-WINDOW_SIZE = (1220, 820)
-WINDOW_MIN_SIZE = (760, 560)
+WINDOW_SIZE = (1280, 780)
+WINDOW_MIN_SIZE = (960, 620)
+_STANDARD_STREAM_FALLBACKS: list[Any] = []
 
 
 @dataclass(frozen=True)
@@ -37,10 +38,62 @@ class RuntimePaths:
     config: Path
 
 
-def _project_root() -> Path:
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for path in paths:
+        try:
+            key = str(path.resolve())
+        except OSError:
+            key = str(path.absolute())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
+
+
+def _resource_root_candidates() -> list[Path]:
+    candidates: list[Path] = []
     if getattr(sys, "frozen", False):
-        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-    return Path(__file__).resolve().parent
+        bundle_root = getattr(sys, "_MEIPASS", None)
+        if bundle_root:
+            candidates.append(Path(bundle_root))
+
+        executable_dir = Path(sys.executable).absolute().parent
+        candidates.extend(
+            [
+                executable_dir,
+                executable_dir / "_internal",
+                executable_dir.parent / "_internal",
+                executable_dir.parent / "Resources",
+                executable_dir.parent / "Frameworks",
+            ]
+        )
+
+    source_root = Path(__file__).resolve().parent
+    candidates.append(source_root)
+    return _dedupe_paths(candidates)
+
+
+def _has_bundled_profiles(path: Path) -> bool:
+    return (path / "profiles").is_dir()
+
+
+def _ensure_standard_streams() -> None:
+    for stream_name in ("stdout", "stderr"):
+        if getattr(sys, stream_name) is None:
+            stream = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115 - kept for process lifetime
+            setattr(sys, stream_name, stream)
+            _STANDARD_STREAM_FALLBACKS.append(stream)
+
+
+def _project_root() -> Path:
+    candidates = _resource_root_candidates()
+    for candidate in candidates:
+        if _has_bundled_profiles(candidate):
+            return candidate
+    return candidates[0]
 
 
 def _switch_to_local_venv() -> None:
@@ -117,6 +170,11 @@ def _runtime_paths() -> RuntimePaths:
     ):
         folder.mkdir(parents=True, exist_ok=True)
     _copy_missing_files(app_root / "rules", paths.recipes)
+    if not paths.profiles.is_dir():
+        raise RuntimeError(
+            "Bundled U1 reference profiles were not found. Rebuild the desktop package "
+            "with the profiles directory included in MkWorld2Snap.spec."
+        )
     return paths
 
 
@@ -139,17 +197,43 @@ def _publish_env(paths: RuntimePaths) -> None:
 
 
 def _initial_window_size() -> tuple[int, int]:
+    def fit_to_screen(screen_width: int, screen_height: int) -> tuple[int, int]:
+        width = min(screen_width, 1360, max(WINDOW_MIN_SIZE[0], int(screen_width * 0.86)))
+        height = min(screen_height, 840, max(WINDOW_MIN_SIZE[1], int(screen_height * 0.84)))
+        return width, height
+
     try:
         import tkinter as tk
 
         root = tk.Tk()
         root.withdraw()
-        width = int(root.winfo_screenwidth() * 0.92)
-        height = int(root.winfo_screenheight() * 0.92)
+        width, height = fit_to_screen(root.winfo_screenwidth(), root.winfo_screenheight())
         root.destroy()
-        return max(WINDOW_MIN_SIZE[0], width), max(WINDOW_MIN_SIZE[1], height)
+        return width, height
     except Exception:
-        return WINDOW_SIZE
+        pass
+
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            user32.SetProcessDPIAware()
+            return fit_to_screen(int(user32.GetSystemMetrics(0)), int(user32.GetSystemMetrics(1)))
+        except Exception:
+            pass
+
+    try:
+        import webview
+
+        screens = getattr(webview, "screens", [])
+        if screens:
+            screen = screens[0]
+            return fit_to_screen(int(screen.width), int(screen.height))
+    except Exception:
+        pass
+
+    return WINDOW_SIZE
 
 
 def _pick_port() -> int:
@@ -180,6 +264,7 @@ class LocalApiEngine:
             host="127.0.0.1",
             port=self.port,
             log_level="warning",
+            log_config=None,
             access_log=False,
         )
         self._uvicorn_server = uvicorn.Server(cfg)
@@ -418,6 +503,7 @@ class NativeWindowBridge:
 
 
 def main() -> None:
+    _ensure_standard_streams()
     _switch_to_local_venv()
     paths = _runtime_paths()
     _publish_env(paths)

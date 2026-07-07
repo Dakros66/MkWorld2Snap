@@ -32,14 +32,25 @@ assert_universal_python() {
 }
 
 build_frontend() {
+  local -a pnpm_cmd
+  local bundled_pnpm="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/pnpm"
+
   cd "$project_root/frontend"
   if command -v pnpm >/dev/null 2>&1; then
-    pnpm install --frozen-lockfile || pnpm install
-    pnpm run build
+    pnpm_cmd=("$(command -v pnpm)")
+  elif [[ -x "$bundled_pnpm" ]]; then
+    pnpm_cmd=("$bundled_pnpm")
+  elif command -v corepack >/dev/null 2>&1; then
+    corepack prepare pnpm@11.7.0 --activate
+    pnpm_cmd=(corepack pnpm)
   else
-    npm install
-    npm run build
+    printf 'pnpm is required to build the frontend. Install pnpm or use Node with Corepack enabled.\n' >&2
+    printf 'npm fallback is intentionally disabled because npm 11/Node 26 can corrupt this dependency graph.\n' >&2
+    exit 1
   fi
+
+  "${pnpm_cmd[@]}" install --frozen-lockfile || "${pnpm_cmd[@]}" install
+  "${pnpm_cmd[@]}" run build
 }
 
 prepare_python() {

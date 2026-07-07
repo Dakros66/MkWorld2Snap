@@ -19,6 +19,8 @@ frontend/.svelte-kit/
 build/
 dist/
 .pyinstaller-cache/
+build_logs/
+.tools/
 desktop_data/
 
 # packaged release outputs

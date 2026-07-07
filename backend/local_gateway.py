@@ -72,7 +72,7 @@ FAILED_CLEANUP_AFTER_SECONDS = int(os.environ.get('CLEANUP_FAILED_TEMP_AFTER_SEC
 RETAIN_FAILED_FILES = os.environ.get('RETAIN_FAILED_FILES', 'false').lower() in ('1', 'true', 'yes')
 CONFIG_FILE = Path(os.environ.get('MKWORLD2SNAP_CONFIG', TMP_DIR.parent / 'settings.json'))
 HISTORY_FILE = CONFIG_FILE.parent / 'conversion_history.json'
-for d in (PROFILES_DIR, USER_PROFILES_DIR, TARGET_PROFILES_DEFAULT_DIR, RULES_DIR, TMP_DIR, FAILED_TMP_DIR):
+for d in (USER_PROFILES_DIR, TARGET_PROFILES_DEFAULT_DIR, RULES_DIR, TMP_DIR, FAILED_TMP_DIR):
     d.mkdir(parents=True, exist_ok=True)
 _JOBS: dict[str, dict[str, Any]] = {}
 _JOBS_LOCK = threading.Lock()
