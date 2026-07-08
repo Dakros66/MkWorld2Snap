@@ -292,7 +292,7 @@ scripts\build_desktop_windows.bat
 That script writes:
 
 ```text
-dist\MkWorld2Snap\MkWorld2Snap.exe
+dist\MkWorld2Snap.exe
 ```
 
 Both scripts use `MkWorld2Snap.spec`, the generated frontend bundle, the bundled
@@ -360,3 +360,8 @@ pnpm run build
 - Painted geometry is preserved for Orca to resolve while slicing; manual pause
   notes cannot be precomputed for all painted-colour cases.
 - Non-main-path slicer formats are best effort and should be checked carefully.
+
+## License
+
+MkWorld2Snap is licensed under the GNU Affero General Public License v3.0 only
+(`AGPL-3.0-only`). See [LICENSE](LICENSE).
