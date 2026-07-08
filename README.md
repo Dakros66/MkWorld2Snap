@@ -363,5 +363,6 @@ pnpm run build
 
 ## License
 
-MkWorld2Snap is licensed under the GNU Affero General Public License v3.0 only
-(`AGPL-3.0-only`). See [LICENSE](LICENSE).
+MkWorld2Snap is licensed under the PolyForm Noncommercial License 1.0.0. See
+[LICENSE](LICENSE). Additional attribution and upstream notices are listed in
+[NOTICE.md](NOTICE.md).
