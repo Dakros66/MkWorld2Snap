@@ -1,3 +1,12 @@
+<p align="center">LAST MkWorld2Snap Release </p>
+
+<p align="center">
+  <a href="https://github.com/Dakros66/MkWorld2Snap/releases/latest">
+    <img src="https://img.shields.io/badge/⬇%20Download-Latest%20Release-2ea44f?style=for-the-badge" alt="Download Latest Release">
+  </a>
+</p>
+
+
 # MkWorld2Snap
 
 MkWorld2Snap is a local desktop workshop for rebuilding downloaded slicer
