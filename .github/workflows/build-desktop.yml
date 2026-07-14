@@ -68,7 +68,7 @@ jobs:
 
   build-macos:
     name: macOS universal2
-    runs-on: macos-13
+    runs-on: macos-latest
     needs: public-repo-guard
     steps:
       - uses: actions/checkout@v4
