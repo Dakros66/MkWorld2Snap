@@ -82,6 +82,11 @@ find_rust_tools() {
   fi
 }
 
+is_universal_macho() {
+  local binary="$1"
+  file "$binary" | grep -q 'x86_64' && file "$binary" | grep -q 'arm64'
+}
+
 ensure_universal_pydantic_core() {
   local extension_file version work_dir source_archive source_dir
   extension_file="$("$venv_python" - <<'PY'
@@ -92,7 +97,7 @@ for path in Path(pydantic_core.__file__).parent.glob('_pydantic_core*.so'):
     break
 PY
 )"
-  if file "$extension_file" | grep -q 'x86_64' && file "$extension_file" | grep -q 'arm64'; then
+  if is_universal_macho "$extension_file"; then
     return
   fi
 
@@ -131,6 +136,49 @@ PY
   file "$extension_file"
 }
 
+ensure_universal_pyyaml() {
+  local extension_file version
+  extension_file="$("$venv_python" - <<'PY'
+from pathlib import Path
+import yaml
+for path in Path(yaml.__file__).parent.glob('_yaml*.so'):
+    print(path)
+    break
+PY
+)"
+  if [[ -n "$extension_file" ]] && is_universal_macho "$extension_file"; then
+    return
+  fi
+
+  printf 'Rebuilding PyYAML as universal2...\n'
+  version="$("$venv_python" - <<'PY'
+import importlib.metadata
+print(importlib.metadata.version("PyYAML"))
+PY
+)"
+  ARCHFLAGS="-arch x86_64 -arch arm64" \
+  MACOSX_DEPLOYMENT_TARGET=11.0 \
+    "$venv_python" -m pip install --force-reinstall --no-binary PyYAML "PyYAML==$version"
+
+  extension_file="$("$venv_python" - <<'PY'
+from pathlib import Path
+import yaml
+for path in Path(yaml.__file__).parent.glob('_yaml*.so'):
+    print(path)
+    break
+PY
+)"
+  if [[ -z "$extension_file" ]]; then
+    printf 'PyYAML is installed without a native extension; continuing.\n'
+    return
+  fi
+  file "$extension_file"
+  if ! is_universal_macho "$extension_file"; then
+    printf 'PyYAML native extension is not universal2: %s\n' "$extension_file" >&2
+    exit 1
+  fi
+}
+
 bundle_app() {
   cd "$project_root"
   PYINSTALLER_CONFIG_DIR="$project_root/.pyinstaller-cache" \
@@ -159,6 +207,7 @@ verify_app() {
 build_frontend
 prepare_python
 ensure_universal_pydantic_core
+ensure_universal_pyyaml
 bundle_app
 verify_app
 
