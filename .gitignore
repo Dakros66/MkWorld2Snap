@@ -30,6 +30,8 @@ releases/
 *.pkg
 *.msi
 *.app.zip
+MkWorld2Snap-*.zip
+SHA256SUMS*.txt
 *.tar.gz
 *.tar.xz
 

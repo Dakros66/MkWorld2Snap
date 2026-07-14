@@ -1,0 +1,248 @@
+name: Build desktop packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release/build version without leading v"
+        required: true
+        default: "1.0.0"
+      create_release:
+        description: "Create or update a GitHub release with the built artifacts"
+        required: true
+        type: boolean
+        default: false
+      release_notes:
+        description: "Optional release notes"
+        required: false
+        default: ""
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: MkWorld2Snap
+  PYTHON_VERSION: "3.12.10"
+  NODE_VERSION: "22"
+  PNPM_VERSION: "11.7.0"
+
+jobs:
+  public-repo-guard:
+    name: Public repository guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Block local paths and generated binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -n -E '(/Users/[^/[:space:]]+|C:\\Users\\[^\\[:space:]]+|C:\\Mac\\Home|/home/[^/[:space:]]+/.codex|build_logs/.*\.log)' -- ':!docs/screenshots/**'; then
+            echo "::error::Public-source guard found a local path or generated log reference."
+            exit 1
+          fi
+          if git ls-files | grep -E '(^dist/|^build/|^build_logs/|\.exe$|\.app$|\.app/|\.dmg$|\.pkg$|\.msi$|\.tar\.(gz|xz)$)'; then
+            echo "::error::Generated desktop artifacts must not be committed."
+            exit 1
+          fi
+
+  build-macos:
+    name: macOS universal2
+    runs-on: macos-13
+    needs: public-repo-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Install universal2 Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o python-universal2.pkg "https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-macos11.pkg"
+          sudo installer -pkg python-universal2.pkg -target /
+          echo "PYTHON_BIN=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" >> "$GITHUB_ENV"
+
+      - name: Prepare Rust targets
+        shell: bash
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+
+      - name: Build app bundle
+        shell: bash
+        run: scripts/build_desktop_macos.sh
+
+      - name: Package app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ github.event.inputs.version || 'snapshot' }}"
+          asset="dist/${APP_NAME}-${version}-macOS-universal2.zip"
+          ditto -c -k --keepParent "dist/${APP_NAME}.app" "$asset"
+          shasum -a 256 "$asset"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MkWorld2Snap-macOS-universal2
+          path: dist/MkWorld2Snap-*-macOS-universal2.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Windows x64
+    runs-on: windows-latest
+    needs: public-repo-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@${env:PNPM_VERSION} --activate
+
+      - name: Install Python x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: "x64"
+
+      - name: Build executable
+        shell: pwsh
+        run: |
+          $env:PYTHON_BIN = Join-Path $env:pythonLocation "python.exe"
+          cmd /c scripts\build_desktop_windows.bat
+
+      - name: Package executable
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.version || 'snapshot' }}"
+          $asset = "dist\MkWorld2Snap-$version-windows-x64.zip"
+          Compress-Archive -Path "dist\MkWorld2Snap.exe" -DestinationPath $asset -Force
+          Get-FileHash $asset -Algorithm SHA256
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MkWorld2Snap-windows-x64
+          path: dist/MkWorld2Snap-*-windows-x64.zip
+          if-no-files-found: error
+
+  build-linux:
+    name: Linux x64
+    runs-on: ubuntu-22.04
+    needs: public-repo-guard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system packages
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip libgtk-3-0 libwebkit2gtk-4.0-37
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build binary
+        shell: bash
+        run: scripts/build_desktop_linux.sh
+
+      - name: Package binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ github.event.inputs.version || 'snapshot' }}"
+          asset="${APP_NAME}-${version}-linux-x64.zip"
+          (cd dist && zip -9 "$asset" "${APP_NAME}")
+          sha256sum "dist/$asset"
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MkWorld2Snap-linux-x64
+          path: dist/MkWorld2Snap-*-linux-x64.zip
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs: [build-macos, build-windows, build-linux]
+    if: github.event_name == 'workflow_dispatch' && inputs.create_release == true
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          notes="${{ inputs.release_notes }}"
+          {
+            printf 'MkWorld2Snap %s\n\n' "$version"
+            if [[ -n "$notes" ]]; then
+              printf '%s\n\n' "$notes"
+            fi
+            printf 'Desktop builds included:\n'
+            printf -- '- macOS universal2\n'
+            printf -- '- Windows x64\n'
+            printf -- '- Linux x64 zip\n'
+          } > release-notes.md
+
+      - name: Create or update GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v${{ inputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release-assets/* --clobber
+            gh release edit "$tag" --notes-file release-notes.md
+          else
+            gh release create "$tag" release-assets/* --title "MkWorld2Snap ${{ inputs.version }}" --notes-file release-notes.md
+          fi

@@ -304,8 +304,37 @@ That script writes:
 dist\MkWorld2Snap.exe
 ```
 
-Both scripts use `MkWorld2Snap.spec`, the generated frontend bundle, the bundled
-U1 profiles, the recipe folder, and the app icons in `assets/`.
+Linux packaging is prepared through:
+
+```bash
+./scripts/build_desktop_linux.sh
+```
+
+That script writes a single executable:
+
+```text
+dist/MkWorld2Snap
+```
+
+All desktop scripts use `MkWorld2Snap.spec`, the generated frontend bundle, the
+bundled U1 profiles, the recipe folder, and the app icons in `assets/`.
+
+## GitHub Actions Builds
+
+The repository includes a manual workflow named `Build desktop packages`.
+
+It builds:
+
+- `MkWorld2Snap-<version>-macOS-universal2.zip`
+- `MkWorld2Snap-<version>-windows-x64.zip`
+- `MkWorld2Snap-<version>-linux-x64.zip`
+
+Run it from GitHub Actions with `create_release=false` to compile and download
+artifacts only. Set `create_release=true` when you want the workflow to create
+or update release `v<version>` with the generated assets and `SHA256SUMS.txt`.
+
+The workflow also runs a public-source guard that fails if generated desktop
+artifacts or local machine paths are accidentally committed.
 
 ## Project Layout
 

@@ -135,7 +135,7 @@ if /I "%BASE_PYTHON_ARCH%"=="ARM64" (
   if /I not "%MKWORLD2SNAP_ALLOW_ARM64%"=="1" (
     echo [ERROR] This Python is ARM64, so PyInstaller would create an ARM64 app.
     echo For normal Windows PCs, install Windows x64 Python 3.12 or 3.13 and run:
-    echo set PYTHON_BIN=C:\Users\daniel\AppData\Local\Programs\Python\Python312\python.exe
+    echo set PYTHON_BIN=C:\Path\To\Python312\python.exe
     echo scripts\build_desktop_windows.bat
     echo.
     echo To intentionally build ARM64, set MKWORLD2SNAP_ALLOW_ARM64=1.

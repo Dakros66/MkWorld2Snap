@@ -7,6 +7,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(SPECPATH)
 IS_MACOS = sys.platform == "darwin"
 IS_WINDOWS = sys.platform.startswith("win")
+IS_LINUX = sys.platform.startswith("linux")
 MAC_ICON = PROJECT_ROOT / "assets" / "app-icon.icns"
 WINDOWS_ICON = PROJECT_ROOT / "assets" / "app-icon.ico"
 TARGET_ARCH = os.environ.get("PYINSTALLER_TARGET_ARCH") if IS_MACOS else None
@@ -68,7 +69,7 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-if IS_WINDOWS or IS_MACOS:
+if IS_WINDOWS or IS_MACOS or IS_LINUX:
     exe = EXE(
         pyz,
         a.scripts,
@@ -89,34 +90,6 @@ if IS_WINDOWS or IS_MACOS:
         entitlements_file=None,
         icon=str(WINDOWS_ICON) if IS_WINDOWS and WINDOWS_ICON.exists() else None,
     )
-else:
-    exe = EXE(
-        pyz,
-        a.scripts,
-        [],
-        exclude_binaries=True,
-        name="MkWorld2Snap",
-        debug=False,
-        bootloader_ignore_signals=False,
-        strip=False,
-        upx=True,
-        console=False,
-        disable_windowed_traceback=False,
-        argv_emulation=False,
-        target_arch=TARGET_ARCH,
-        codesign_identity=None,
-        entitlements_file=None,
-    )
-    coll = COLLECT(
-        exe,
-        a.binaries,
-        a.datas,
-        strip=False,
-        upx=True,
-        upx_exclude=[],
-        name="MkWorld2Snap",
-    )
-
 if IS_MACOS:
     app = BUNDLE(
         exe,
