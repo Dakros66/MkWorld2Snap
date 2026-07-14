@@ -42,7 +42,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git grep -n -E '(/Users/[^/[:space:]]+|C:\\Users\\[^\\[:space:]]+|C:\\Mac\\Home|/home/[^/[:space:]]+/.codex|build_logs/.*\.log)' -- ':!docs/screenshots/**'; then
+          slash='/'
+          bs='\\'
+          found=0
+          patterns=(
+            "${slash}Users${slash}[^/[:space:]]+"
+            "C:${bs}${bs}Users${bs}${bs}[^${bs}[:space:]]+"
+            "C:${bs}${bs}Mac${bs}${bs}Home"
+            "${slash}home${slash}[^/[:space:]]+${slash}[.]codex"
+            "build_logs/.*[.]log"
+          )
+          for pattern in "${patterns[@]}"; do
+            if git grep -n -E "$pattern" -- ':!docs/screenshots/**'; then
+              found=1
+            fi
+          done
+          if [[ "$found" == "1" ]]; then
             echo "::error::Public-source guard found a local path or generated log reference."
             exit 1
           fi
