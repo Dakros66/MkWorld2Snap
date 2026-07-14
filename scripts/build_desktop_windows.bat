@@ -88,6 +88,7 @@ set "BASE_PYTHON_DIR="
 set "EMBEDDED_PYTHON=0"
 set "ARCH_PROBE_FILE=%PROJECT_ROOT%\build_logs\python_arch_probe.py"
 set "NPM_CMD="
+set "HAS_PNPM=0"
 set "NODE_VERSION=22.23.1"
 set "NODE_PACKAGE=node-v%NODE_VERSION%-win-x64"
 set "NODE_TOOLS_DIR=%PROJECT_ROOT%\.tools"
@@ -211,42 +212,48 @@ if errorlevel 1 (
   goto :error
 )
 
-echo [4/7] Checking Node.js/npm...
-where npm >nul 2>nul
-if errorlevel 1 (
-  echo npm was not found in PATH. Preparing portable Node.js %NODE_VERSION% x64...
-  if not exist "%NODE_DIR%\node.exe" (
-    if not exist "%NODE_TOOLS_DIR%" mkdir "%NODE_TOOLS_DIR%"
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$url=$env:NODE_URL; $zip=$env:NODE_ZIP; $target=$env:NODE_TOOLS_DIR; Write-Host ('Downloading ' + $url); Invoke-WebRequest -Uri $url -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $target -Force"
-    if errorlevel 1 goto :error
-  )
-  if not exist "%NODE_DIR%\npm.cmd" (
-    echo [ERROR] Portable npm was not found after extracting Node.js.
-    goto :error
-  )
-  set "PATH=%NODE_DIR%;%PATH%"
-  set "NPM_CMD=%NODE_DIR%\npm.cmd"
+echo [4/7] Checking Node.js/package manager...
+where pnpm >nul 2>nul
+if not errorlevel 1 (
+  set "HAS_PNPM=1"
+  call pnpm --version
+  if errorlevel 1 goto :error
 ) else (
-  set "NPM_CMD=npm"
+  where npm >nul 2>nul
+  if errorlevel 1 (
+    echo npm was not found in PATH. Preparing portable Node.js %NODE_VERSION% x64...
+    if not exist "%NODE_DIR%\node.exe" (
+      if not exist "%NODE_TOOLS_DIR%" mkdir "%NODE_TOOLS_DIR%"
+      powershell -NoProfile -ExecutionPolicy Bypass -Command "$url=$env:NODE_URL; $zip=$env:NODE_ZIP; $target=$env:NODE_TOOLS_DIR; Write-Host ('Downloading ' + $url); Invoke-WebRequest -Uri $url -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $target -Force"
+      if errorlevel 1 goto :error
+    )
+    if not exist "%NODE_DIR%\npm.cmd" (
+      echo [ERROR] Portable npm was not found after extracting Node.js.
+      goto :error
+    )
+    set "PATH=%NODE_DIR%;%PATH%"
+    set "NPM_CMD=%NODE_DIR%\npm.cmd"
+  ) else (
+    set "NPM_CMD=npm.cmd"
+  )
+  call "%NPM_CMD%" --version
+  if errorlevel 1 goto :error
 )
-call "%NPM_CMD%" --version
-if errorlevel 1 goto :error
 
 echo [5/7] Building frontend...
 cd /d "%PROJECT_ROOT%\frontend" || goto :error
-where pnpm >nul 2>nul
-if errorlevel 1 (
-  echo pnpm not found. Using npm.
-  call "%NPM_CMD%" install
-  if errorlevel 1 goto :error
-  call "%NPM_CMD%" run build
-  if errorlevel 1 goto :error
-) else (
+if "%HAS_PNPM%"=="1" (
   echo pnpm found. Using pnpm.
   call pnpm install --frozen-lockfile
   if errorlevel 1 call pnpm install
   if errorlevel 1 goto :error
   call pnpm run build
+  if errorlevel 1 goto :error
+) else (
+  echo pnpm not found. Using npm.
+  call "%NPM_CMD%" install
+  if errorlevel 1 goto :error
+  call "%NPM_CMD%" run build
   if errorlevel 1 goto :error
 )
 
