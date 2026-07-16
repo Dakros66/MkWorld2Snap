@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { CircleHelp, FileText, RotateCcw, Save, SlidersHorizontal, X } from 'lucide-svelte';
+  import { CircleHelp, Download, FileText, MoreHorizontal, RotateCcw, Save, SlidersHorizontal, X } from 'lucide-svelte';
   
   
   import type { DiffPayload, JobParameter, JobParameterGroup } from './engineClient';
-  import { downloadUrl, jobParameters, rebuildJob, saveAs } from './engineClient';
+  import { downloadUrl, jobParameters, rebuildJob } from './engineClient';
   import ScenePreview from './ScenePreview.svelte';
   import { tr as i18n } from './i18n';
 
@@ -42,6 +42,8 @@
   let activeParamGroup = $state('Quality');
   let paramSearch = $state('');
   let showChangedOnly = $state(true);
+  let hasNativeSave = $state(false);
+  let saveMenuOpen = $state<'' | 'header' | 'dock'>('');
   const saveStatusIsError = $derived(
     /\b(fail|failed|error|not found|expired|cleaned|could not|download failed)\b/i.test(saveStatus)
   );
@@ -73,6 +75,16 @@
   $effect(() => {
     const id = activeJobId;
     void loadJobParameters(id);
+  });
+
+  $effect(() => {
+    let cancelled = false;
+    void waitForDesktopBridge(900).then((bridge) => {
+      if (!cancelled) hasNativeSave = Boolean(bridge?.api?.save_converted_file);
+    });
+    return () => {
+      cancelled = true;
+    };
   });
 
   // Auto-expand swap instructions card if present.
@@ -445,7 +457,7 @@
     };
   };
 
-  async function waitForDesktopBridge(): Promise<DesktopBridge | undefined> {
+  async function waitForDesktopBridge(timeoutMs = 1200): Promise<DesktopBridge | undefined> {
     const current = (window as unknown as { pywebview?: DesktopBridge }).pywebview;
     if (current?.api?.save_converted_file) return current;
 
@@ -453,7 +465,7 @@
       const timer = window.setTimeout(() => {
         window.removeEventListener('pywebviewready', onReady);
         resolve((window as unknown as { pywebview?: DesktopBridge }).pywebview);
-      }, 1200);
+      }, timeoutMs);
 
       function onReady() {
         window.clearTimeout(timer);
@@ -464,69 +476,99 @@
     });
   }
 
-  async function downloadConverted() {
+  async function browserDownloadConverted() {
+    const response = await fetch(downloadUrl(activeJobId));
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        detail = body.detail ?? JSON.stringify(body);
+      } catch {
+        detail = await response.text();
+      }
+      throw new Error($i18n('Download failed: {detail}', { detail }));
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = activeDownloadName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function nativeSaveConverted(): Promise<'saved' | 'cancelled' | 'unavailable'> {
+    const pywebview = await waitForDesktopBridge();
+    if (!pywebview?.api?.save_converted_file) return 'unavailable';
+
+    const result = await pywebview.api.save_converted_file(activeJobId, activeDownloadName);
+    if (result.ok) {
+      saveStatus = result.path
+        ? $i18n('Saved to {path}{suffix}', { path: result.path, suffix: result.revealed ? ` - ${$i18n('shown in file manager')}` : '' })
+        : $i18n('Saved');
+      return 'saved';
+    }
+    if (result.cancelled) return 'cancelled';
+    throw new Error(result.error || $i18n('Save failed'));
+  }
+
+  async function saveOrDownloadConverted() {
     saveStatus = '';
+    saveMenuOpen = '';
     saving = true;
     try {
-      const pywebview = await waitForDesktopBridge();
+      if (hasNativeSave) {
+        const result = await nativeSaveConverted();
+        if (result === 'saved' || result === 'cancelled') return;
+      }
 
-      if (pywebview?.api?.save_converted_file) {
+      await browserDownloadConverted();
+      saveStatus = $i18n('Download started');
+    } catch (err) {
+      if (hasNativeSave) {
         try {
-          const result = await pywebview.api.save_converted_file(activeJobId, activeDownloadName);
-          if (result.ok) {
-            saveStatus = result.path
-              ? $i18n('Saved to {path}{suffix}', { path: result.path, suffix: result.revealed ? ` - ${$i18n('shown in file manager')}` : '' })
-              : $i18n('Saved');
-            return;
-          }
-          if (result.cancelled) {
-            saveStatus = '';
-            return;
-          }
-        } catch (err) {
-          saveStatus = err instanceof Error ? err.message : $i18n('Save failed');
-        }
-      }
-
-      try {
-        const result = await saveAs(activeJobId);
-        if (result.ok) {
-          saveStatus = $i18n('Saved to {path}{suffix}', { path: result.path ?? '', suffix: result.revealed ? ` - ${$i18n('shown in file manager')}` : '' });
+          await browserDownloadConverted();
+          saveStatus = $i18n('Native save failed, browser download started');
           return;
+        } catch {
+          // Surface the original native-save error if the fallback also fails.
         }
-        if (result.cancelled) {
-          saveStatus = '';
-          return;
-        }
-      } catch (err) {
-        saveStatus = err instanceof Error ? err.message : $i18n('Save failed');
       }
+      saveStatus = err instanceof Error ? err.message : $i18n('Download failed');
+    } finally {
+      saving = false;
+    }
+  }
 
-      try {
-        const response = await fetch(downloadUrl(activeJobId));
-        if (!response.ok) {
-          let detail = response.statusText;
-          try {
-            const body = await response.json();
-            detail = body.detail ?? JSON.stringify(body);
-          } catch {
-            detail = await response.text();
-          }
-          throw new Error($i18n('Download failed: {detail}', { detail }));
-        }
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = activeDownloadName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        saveStatus = $i18n('Save started');
-      } catch (err) {
-        saveStatus = err instanceof Error ? err.message : $i18n('Save failed');
-      }
+  async function forceNativeSave() {
+    saveStatus = '';
+    saveMenuOpen = '';
+    if (!hasNativeSave) {
+      saveStatus = $i18n('Desktop save is unavailable in this browser');
+      return;
+    }
+    saving = true;
+    try {
+      const result = await nativeSaveConverted();
+      if (result === 'unavailable') saveStatus = $i18n('Desktop save is unavailable in this browser');
+    } catch (err) {
+      saveStatus = err instanceof Error ? err.message : $i18n('Save failed');
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function forceBrowserDownload() {
+    saveStatus = '';
+    saveMenuOpen = '';
+    saving = true;
+    try {
+      await browserDownloadConverted();
+      saveStatus = $i18n('Download started');
+    } catch (err) {
+      saveStatus = err instanceof Error ? err.message : $i18n('Download failed');
     } finally {
       saving = false;
     }
@@ -590,10 +632,39 @@
         <FileText size={15} strokeWidth={2.4} aria-hidden="true" />
         {$i18n('Export report')}
       </button>
-      <button type="button" class="artifact-save" onclick={downloadConverted} disabled={saving}>
-        <Save size={15} strokeWidth={2.4} aria-hidden="true" />
-        {saving ? $i18n('Saving...') : $i18n('Save 3MF')}
-      </button>
+      <div class="save-split">
+        <button type="button" class="artifact-save split-main" onclick={saveOrDownloadConverted} disabled={saving}>
+          {#if hasNativeSave}
+            <Save size={15} strokeWidth={2.4} aria-hidden="true" />
+            {saving ? $i18n('Saving...') : $i18n('Save 3MF')}
+          {:else}
+            <Download size={15} strokeWidth={2.4} aria-hidden="true" />
+            {saving ? $i18n('Downloading...') : $i18n('Download 3MF')}
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="save-menu-trigger"
+          onclick={() => (saveMenuOpen = saveMenuOpen === 'header' ? '' : 'header')}
+          disabled={saving}
+          aria-label={$i18n('More save options')}
+          aria-expanded={saveMenuOpen === 'header'}
+        >
+          <MoreHorizontal size={18} strokeWidth={2.7} aria-hidden="true" />
+        </button>
+        {#if saveMenuOpen === 'header'}
+          <div class="save-menu" role="menu">
+            <button type="button" role="menuitem" onclick={forceNativeSave} disabled={!hasNativeSave || saving} title={!hasNativeSave ? $i18n('Desktop save is unavailable in this browser') : ''}>
+              <Save size={15} strokeWidth={2.4} aria-hidden="true" />
+              {$i18n('Save with dialog')}
+            </button>
+            <button type="button" role="menuitem" onclick={forceBrowserDownload} disabled={saving}>
+              <Download size={15} strokeWidth={2.4} aria-hidden="true" />
+              {$i18n('Download through browser')}
+            </button>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -979,10 +1050,39 @@
   {/if}
 
   <div class="artifact-save-dock">
-    <button type="button" class="artifact-save large" onclick={downloadConverted} disabled={saving}>
-      <Save size={16} strokeWidth={2.4} aria-hidden="true" />
-      {saving ? $i18n('Saving...') : `${$i18n('Save')} ${activeDownloadName}`}
-    </button>
+    <div class="save-split dock-split">
+      <button type="button" class="artifact-save large split-main" onclick={saveOrDownloadConverted} disabled={saving}>
+        {#if hasNativeSave}
+          <Save size={16} strokeWidth={2.4} aria-hidden="true" />
+          {saving ? $i18n('Saving...') : `${$i18n('Save')} ${activeDownloadName}`}
+        {:else}
+          <Download size={16} strokeWidth={2.4} aria-hidden="true" />
+          {saving ? $i18n('Downloading...') : `${$i18n('Download')} ${activeDownloadName}`}
+        {/if}
+      </button>
+      <button
+        type="button"
+        class="save-menu-trigger large"
+        onclick={() => (saveMenuOpen = saveMenuOpen === 'dock' ? '' : 'dock')}
+        disabled={saving}
+        aria-label={$i18n('More save options')}
+        aria-expanded={saveMenuOpen === 'dock'}
+      >
+        <MoreHorizontal size={20} strokeWidth={2.7} aria-hidden="true" />
+      </button>
+      {#if saveMenuOpen === 'dock'}
+        <div class="save-menu dock-menu" role="menu">
+          <button type="button" role="menuitem" onclick={forceNativeSave} disabled={!hasNativeSave || saving} title={!hasNativeSave ? $i18n('Desktop save is unavailable in this browser') : ''}>
+            <Save size={15} strokeWidth={2.4} aria-hidden="true" />
+            {$i18n('Save with dialog')}
+          </button>
+          <button type="button" role="menuitem" onclick={forceBrowserDownload} disabled={saving}>
+            <Download size={15} strokeWidth={2.4} aria-hidden="true" />
+            {$i18n('Download through browser')}
+          </button>
+        </div>
+      {/if}
+    </div>
   </div>
 
   {#if showReportPopup}
@@ -1643,6 +1743,99 @@
       0 5px 0 color-mix(in srgb, var(--mint) 42%, #071b17),
       0 14px 28px color-mix(in srgb, var(--ink) 24%, transparent);
   }
+
+  .save-split {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    isolation: isolate;
+  }
+
+  .save-split .split-main {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right-width: 1px;
+  }
+
+  .save-menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-height: 44px;
+    border: 2px solid color-mix(in srgb, var(--mint) 58%, var(--ink));
+    border-left: 0;
+    border-radius: 0 14px 14px 0;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--ink) 88%, var(--mint)), color-mix(in srgb, var(--ink) 98%, #000));
+    color: #fffdf8;
+    cursor: pointer;
+    box-shadow:
+      0 5px 0 color-mix(in srgb, var(--mint) 42%, #071b17),
+      0 14px 28px color-mix(in srgb, var(--ink) 24%, transparent);
+  }
+
+  .save-menu-trigger.large {
+    width: 50px;
+    min-height: 50px;
+  }
+
+  .save-menu-trigger:hover {
+    filter: saturate(1.05) brightness(1.08);
+  }
+
+  .save-menu-trigger:disabled {
+    opacity: 0.65;
+    cursor: wait;
+  }
+
+  .save-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    z-index: 120;
+    display: grid;
+    gap: 6px;
+    min-width: 235px;
+    padding: 8px;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg) 94%, #fff);
+    box-shadow:
+      0 20px 38px color-mix(in srgb, var(--ink) 18%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--mint) 15%, transparent);
+  }
+
+  .dock-menu {
+    top: auto;
+    bottom: calc(100% + 10px);
+  }
+
+  .save-menu button {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-weight: 850;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .save-menu button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--mint) 18%, transparent);
+  }
+
+  .save-menu button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
   .artifact-save:hover {
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--ink) 86%, var(--mint)), color-mix(in srgb, var(--ink) 96%, #000));
@@ -1654,6 +1847,7 @@
       0 10px 22px color-mix(in srgb, var(--ink) 24%, transparent);
   }
   .artifact-save:disabled { opacity: 0.65; cursor: wait; }
+  .artifact-save:disabled + .save-menu-trigger { opacity: 0.8; }
   .artifact-save.large { min-height: 50px; padding: 14px 34px; font-size: 16px; }
   .artifact-save.compact {
     min-height: 38px;
