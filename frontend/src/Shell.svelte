@@ -369,7 +369,7 @@
         <span class="brand-copy">
           <span class="brand-name">MkWorld2Snap</span>
           <span class="brand-tag">{$tr('print file workshop')}</span>
-          <span class="brand-version">v1.0.0</span>
+          <span class="brand-version">v1.0.3</span>
         </span>
       </button>
       <div class="wordmark-tooltip" role="tooltip">
