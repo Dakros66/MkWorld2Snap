@@ -265,7 +265,7 @@ def list_profiles(bundled_dir: Path, user_dir: Path | None=None) -> list[Profile
         for local_01 in sorted(user_dir.glob('*.3mf')):
             local_02 = _descriptor(local_01, source='user')
             local_00[local_02.id] = local_02
-    return sorted(local_00.values(), key=lambda d: local_02.display_name)
+    return sorted(local_00.values(), key=lambda d: d.display_name)
 _QUALITY_KEYWORDS = ('extra draft', 'fast draft', 'draft', 'fine detail', 'fine', 'high quality', 'balanced', 'optimal', 'strength', 'standard')
 
 def suggest_profile(profiles: list[ProfileCard], source_settings: dict) -> ProfileCard | None:
@@ -307,7 +307,7 @@ def suggest_profile(profiles: list[ProfileCard], source_settings: dict) -> Profi
 
         def _dist(p: ProfileCard) -> float:
             try:
-                return abs(float(local_06.layer_height or 0) - local_01)
+                return abs(float(p.layer_height or 0) - local_01)
             except (TypeError, ValueError):
                 return 999.0
         return min(profiles, key=_dist)
