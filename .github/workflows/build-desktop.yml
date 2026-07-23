@@ -112,11 +112,13 @@ jobs:
           shasum -a 256 "$asset"
 
       - name: Upload macOS artifact
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: MkWorld2Snap-macOS-universal2
           path: dist/MkWorld2Snap-*-macOS-universal2.zip
           if-no-files-found: error
+          retention-days: 3
 
   build-windows:
     name: Windows x64
@@ -157,11 +159,13 @@ jobs:
           Get-FileHash $asset -Algorithm SHA256
 
       - name: Upload Windows artifact
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: MkWorld2Snap-windows-x64
           path: dist/MkWorld2Snap-*-windows-x64.zip
           if-no-files-found: error
+          retention-days: 3
 
   build-linux:
     name: Linux x64
@@ -206,11 +210,13 @@ jobs:
           sha256sum "dist/$asset"
 
       - name: Upload Linux artifact
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: MkWorld2Snap-linux-x64
           path: dist/MkWorld2Snap-*-linux-x64.zip
           if-no-files-found: error
+          retention-days: 3
 
   release:
     name: GitHub release
