@@ -81,7 +81,7 @@ if IS_WINDOWS or IS_MACOS or IS_LINUX:
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=True,
+        upx=False,
         console=False,
         disable_windowed_traceback=False,
         argv_emulation=False,

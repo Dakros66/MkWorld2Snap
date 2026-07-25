@@ -186,6 +186,7 @@ bundle_app() {
     "$venv_python" -m PyInstaller \
       --clean \
       --noconfirm \
+      --noupx \
       --distpath "$project_root/dist" \
       --workpath "$project_root/build" \
       "$project_root/MkWorld2Snap.spec"

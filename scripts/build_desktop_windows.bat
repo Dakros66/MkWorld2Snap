@@ -274,7 +274,7 @@ if not exist "%PROJECT_ROOT%\rules" (
 
 echo [7/7] Creating Windows executable with PyInstaller...
 set "PYINSTALLER_CONFIG_DIR=%PROJECT_ROOT%\.pyinstaller-cache"
-"%VENV_PYTHON%" -m PyInstaller --clean --noconfirm --distpath "%PROJECT_ROOT%\dist" --workpath "%PROJECT_ROOT%\build" "%PROJECT_ROOT%\MkWorld2Snap.spec"
+"%VENV_PYTHON%" -m PyInstaller --clean --noconfirm --noupx --distpath "%PROJECT_ROOT%\dist" --workpath "%PROJECT_ROOT%\build" "%PROJECT_ROOT%\MkWorld2Snap.spec"
 if errorlevel 1 goto :error
 
 if not exist "%PROJECT_ROOT%\dist\MkWorld2Snap.exe" (
