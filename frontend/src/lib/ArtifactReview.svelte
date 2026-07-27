@@ -3,7 +3,7 @@
   
   
   import type { DiffPayload, JobParameter, JobParameterGroup } from './engineClient';
-  import { downloadUrl, jobParameters, rebuildJob } from './engineClient';
+  import { downloadUrl, enginePing, jobParameters, rebuildJob, saveAs } from './engineClient';
   import ScenePreview from './ScenePreview.svelte';
   import { tr as i18n } from './i18n';
 
@@ -43,7 +43,10 @@
   let paramSearch = $state('');
   let showChangedOnly = $state(true);
   let hasNativeSave = $state(false);
+  let backendSaveDialogAvailable = $state(false);
   let saveMenuOpen = $state<'' | 'header' | 'dock'>('');
+  let nativeCapabilityChecked = $state(false);
+  let canNativeSave = $derived(hasNativeSave || backendSaveDialogAvailable);
   const saveStatusIsError = $derived(
     /\b(fail|failed|error|not found|expired|cleaned|could not|download failed)\b/i.test(saveStatus)
   );
@@ -79,8 +82,8 @@
 
   $effect(() => {
     let cancelled = false;
-    void waitForDesktopBridge(900).then((bridge) => {
-      if (!cancelled) hasNativeSave = Boolean(bridge?.api?.save_converted_file);
+    void refreshNativeSaveCapability().finally(() => {
+      if (!cancelled) nativeCapabilityChecked = true;
     });
     return () => {
       cancelled = true;
@@ -457,23 +460,67 @@
     };
   };
 
-  async function waitForDesktopBridge(timeoutMs = 1200): Promise<DesktopBridge | undefined> {
+  async function waitForDesktopBridge(timeoutMs = 5000): Promise<DesktopBridge | undefined> {
     const current = (window as unknown as { pywebview?: DesktopBridge }).pywebview;
     if (current?.api?.save_converted_file) return current;
 
     return new Promise((resolve) => {
+      const started = Date.now();
       const timer = window.setTimeout(() => {
+        window.clearInterval(poller);
         window.removeEventListener('pywebviewready', onReady);
         resolve((window as unknown as { pywebview?: DesktopBridge }).pywebview);
       }, timeoutMs);
+      const poller = window.setInterval(() => {
+        const next = (window as unknown as { pywebview?: DesktopBridge }).pywebview;
+        if (next?.api?.save_converted_file || Date.now() - started >= timeoutMs) {
+          window.clearTimeout(timer);
+          window.clearInterval(poller);
+          window.removeEventListener('pywebviewready', onReady);
+          resolve(next);
+        }
+      }, 100);
 
       function onReady() {
         window.clearTimeout(timer);
+        window.clearInterval(poller);
         resolve((window as unknown as { pywebview?: DesktopBridge }).pywebview);
       }
 
       window.addEventListener('pywebviewready', onReady, { once: true });
     });
+  }
+
+  async function refreshNativeSaveCapability() {
+    const bridgeCheck = waitForDesktopBridge(5000)
+      .then((bridge) => {
+        hasNativeSave = Boolean(bridge?.api?.save_converted_file);
+      })
+      .catch(() => {
+        hasNativeSave = false;
+      });
+    const engineCheck = enginePing()
+      .then((ping) => {
+        backendSaveDialogAvailable = Boolean(ping.capabilities?.save_dialog);
+      })
+      .catch(() => {
+        backendSaveDialogAvailable = false;
+      });
+    await Promise.allSettled([bridgeCheck, engineCheck]);
+  }
+
+  async function ensureNativeSaveCapabilityForAction() {
+    if (canNativeSave) return;
+    try {
+      const ping = await enginePing();
+      backendSaveDialogAvailable = Boolean(ping.capabilities?.save_dialog);
+      if (backendSaveDialogAvailable) return;
+    } catch {
+      backendSaveDialogAvailable = false;
+    }
+    const bridge = await waitForDesktopBridge(1500);
+    hasNativeSave = Boolean(bridge?.api?.save_converted_file);
+    nativeCapabilityChecked = true;
   }
 
   async function browserDownloadConverted() {
@@ -500,10 +547,16 @@
   }
 
   async function nativeSaveConverted(): Promise<'saved' | 'cancelled' | 'unavailable'> {
-    const pywebview = await waitForDesktopBridge();
-    if (!pywebview?.api?.save_converted_file) return 'unavailable';
-
-    const result = await pywebview.api.save_converted_file(activeJobId, activeDownloadName);
+    const pywebview = await waitForDesktopBridge(2500);
+    let result: { ok: boolean; path?: string; error?: string; cancelled?: boolean; revealed?: boolean } | undefined;
+    if (pywebview?.api?.save_converted_file) {
+      hasNativeSave = true;
+      result = await pywebview.api.save_converted_file(activeJobId, activeDownloadName);
+    } else if (backendSaveDialogAvailable) {
+      result = await saveAs(activeJobId);
+    } else {
+      return 'unavailable';
+    }
     if (result.ok) {
       saveStatus = result.path
         ? $i18n('Saved to {path}{suffix}', { path: result.path, suffix: result.revealed ? ` - ${$i18n('shown in file manager')}` : '' })
@@ -519,7 +572,8 @@
     saveMenuOpen = '';
     saving = true;
     try {
-      if (hasNativeSave) {
+      await ensureNativeSaveCapabilityForAction();
+      if (canNativeSave) {
         const result = await nativeSaveConverted();
         if (result === 'saved' || result === 'cancelled') return;
       }
@@ -527,7 +581,7 @@
       await browserDownloadConverted();
       saveStatus = $i18n('Download started');
     } catch (err) {
-      if (hasNativeSave) {
+      if (canNativeSave) {
         try {
           await browserDownloadConverted();
           saveStatus = $i18n('Native save failed, browser download started');
@@ -545,7 +599,8 @@
   async function forceNativeSave() {
     saveStatus = '';
     saveMenuOpen = '';
-    if (!hasNativeSave) {
+    await ensureNativeSaveCapabilityForAction();
+    if (!canNativeSave) {
       saveStatus = $i18n('Desktop save is unavailable in this browser');
       return;
     }
@@ -634,7 +689,7 @@
       </button>
       <div class="save-split">
         <button type="button" class="artifact-save split-main" onclick={saveOrDownloadConverted} disabled={saving}>
-          {#if hasNativeSave}
+          {#if canNativeSave}
             <Save size={15} strokeWidth={2.4} aria-hidden="true" />
             {saving ? $i18n('Saving...') : $i18n('Save 3MF')}
           {:else}
@@ -654,7 +709,7 @@
         </button>
         {#if saveMenuOpen === 'header'}
           <div class="save-menu" role="menu">
-            <button type="button" role="menuitem" onclick={forceNativeSave} disabled={!hasNativeSave || saving} title={!hasNativeSave ? $i18n('Desktop save is unavailable in this browser') : ''}>
+            <button type="button" role="menuitem" onclick={forceNativeSave} disabled={!canNativeSave || saving} title={!canNativeSave ? $i18n('Desktop save is unavailable in this browser') : ''}>
               <Save size={15} strokeWidth={2.4} aria-hidden="true" />
               {$i18n('Save with dialog')}
             </button>
@@ -1052,7 +1107,7 @@
   <div class="artifact-save-dock">
     <div class="save-split dock-split">
       <button type="button" class="artifact-save large split-main" onclick={saveOrDownloadConverted} disabled={saving}>
-        {#if hasNativeSave}
+        {#if canNativeSave}
           <Save size={16} strokeWidth={2.4} aria-hidden="true" />
           {saving ? $i18n('Saving...') : `${$i18n('Save')} ${activeDownloadName}`}
         {:else}
@@ -1072,7 +1127,7 @@
       </button>
       {#if saveMenuOpen === 'dock'}
         <div class="save-menu dock-menu" role="menu">
-          <button type="button" role="menuitem" onclick={forceNativeSave} disabled={!hasNativeSave || saving} title={!hasNativeSave ? $i18n('Desktop save is unavailable in this browser') : ''}>
+          <button type="button" role="menuitem" onclick={forceNativeSave} disabled={!canNativeSave || saving} title={!canNativeSave ? $i18n('Desktop save is unavailable in this browser') : ''}>
             <Save size={15} strokeWidth={2.4} aria-hidden="true" />
             {$i18n('Save with dialog')}
           </button>

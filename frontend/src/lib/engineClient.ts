@@ -54,6 +54,14 @@ export interface ConvertResult {
   diff: DiffPayload;
 }
 
+export interface EnginePing {
+  status: string;
+  capabilities?: {
+    save_dialog?: boolean;
+    reveal_file?: boolean;
+  };
+}
+
 export interface PreviewPlate {
   id: number;
   origin: [number, number, number];
@@ -176,6 +184,10 @@ async function handle<T>(response: Response): Promise<T> {
 
 export async function listProfiles(): Promise<ProfileDescriptor[]> {
   return handle(await fetch('/engine/reference-shelf'));
+}
+
+export async function enginePing(): Promise<EnginePing> {
+  return handle(await fetch('/engine/ping'));
 }
 
 export async function importReferenceProfiles(files: File[]): Promise<{ imported: Array<{ name: string; printer_model: string; layer_height: string }>; errors: Array<{ name: string; error: string }>; profiles: ProfileDescriptor[] }> {

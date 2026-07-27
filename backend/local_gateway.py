@@ -1068,8 +1068,14 @@ def _save_upload(file: UploadFile, dst: Path, *, size_limit_bytes: int | None=No
             local_01.write(local_02)
 
 @app.get('/engine/ping')
-def engine_ping() -> dict[str, str]:
-    return {'status': 'ok'}
+def engine_ping() -> dict[str, Any]:
+    return {
+        'status': 'ok',
+        'capabilities': {
+            'save_dialog': os.environ.get('MKWORLD2SNAP_SAVE_DIALOG', '1') != '0' and sys.platform == 'darwin',
+            'reveal_file': os.environ.get('MKWORLD2SNAP_REVEAL_SAVED', '1') != '0',
+        },
+    }
 
 @app.get('/robots.txt', include_in_schema=False)
 def robots_txt():
