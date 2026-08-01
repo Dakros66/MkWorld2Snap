@@ -282,6 +282,11 @@ Then open:
 http://localhost:8084
 ```
 
+The Docker image already includes the bundled U1 reference profiles. Do not
+mount an empty host `profiles` directory over `/app/profiles`, because that
+would hide the bundled profiles and automatic conversions would be marked for
+review with `No U1 reference profiles are available`.
+
 ## Desktop Packaging
 
 ```bash
