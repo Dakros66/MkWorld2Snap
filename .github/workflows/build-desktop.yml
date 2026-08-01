@@ -18,6 +18,7 @@ on:
         default: ""
   push:
     branches: ["main"]
+    tags: ["v*"]
   pull_request:
     branches: ["main"]
 
@@ -106,13 +107,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ github.event.inputs.version || 'snapshot' }}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${{ github.event.inputs.version || 'snapshot' }}"
+          fi
           asset="dist/${APP_NAME}-${version}-macOS-universal2.zip"
           ditto -c -k --keepParent "dist/${APP_NAME}.app" "$asset"
           shasum -a 256 "$asset"
 
       - name: Upload macOS artifact
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: MkWorld2Snap-macOS-universal2
@@ -153,13 +158,17 @@ jobs:
       - name: Package executable
         shell: pwsh
         run: |
-          $version = "${{ github.event.inputs.version || 'snapshot' }}"
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          } else {
+            $version = "${{ github.event.inputs.version || 'snapshot' }}"
+          }
           $asset = "dist\MkWorld2Snap-$version-windows-x64.zip"
           Compress-Archive -Path "dist\MkWorld2Snap.exe" -DestinationPath $asset -Force
           Get-FileHash $asset -Algorithm SHA256
 
       - name: Upload Windows artifact
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: MkWorld2Snap-windows-x64
@@ -204,13 +213,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ github.event.inputs.version || 'snapshot' }}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${{ github.event.inputs.version || 'snapshot' }}"
+          fi
           asset="${APP_NAME}-${version}-linux-x64.zip"
           (cd dist && zip -9 "$asset" "${APP_NAME}")
           sha256sum "dist/$asset"
 
       - name: Upload Linux artifact
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: MkWorld2Snap-linux-x64
@@ -222,12 +235,20 @@ jobs:
     name: GitHub release
     runs-on: ubuntu-latest
     needs: [build-macos, build-windows, build-linux]
-    if: github.event_name == 'workflow_dispatch' && inputs.create_release == true
+    if: (github.event_name == 'workflow_dispatch' && inputs.create_release == true) || startsWith(github.ref, 'refs/tags/v')
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
+
+      - name: Include license notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp LICENSE NOTICE.md release-assets/
 
       - name: Generate checksums
         shell: bash
@@ -241,8 +262,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ inputs.version }}"
-          notes="${{ inputs.release_notes }}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            notes="Fixes Docker automatic conversions by keeping bundled U1 reference profiles inside the container image. Includes macOS universal2, Windows x64, and Linux x64 packages."
+          else
+            version="${{ inputs.version }}"
+            notes="${{ inputs.release_notes }}"
+          fi
           {
             printf 'MkWorld2Snap %s\n\n' "$version"
             if [[ -n "$notes" ]]; then
@@ -261,10 +287,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          tag="v${{ inputs.version }}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            tag="${GITHUB_REF_NAME}"
+          else
+            version="${{ inputs.version }}"
+            tag="v${version}"
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" release-assets/* --clobber
             gh release edit "$tag" --notes-file release-notes.md
           else
-            gh release create "$tag" release-assets/* --title "MkWorld2Snap ${{ inputs.version }}" --notes-file release-notes.md
+            gh release create "$tag" release-assets/* --title "MkWorld2Snap ${version}" --notes-file release-notes.md
           fi
