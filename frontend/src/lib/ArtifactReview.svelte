@@ -23,11 +23,10 @@
   const initialDiff = () => diff;
   const initialJobId = () => jobId;
   const initialDownloadName = () => downloadName;
-  const initialSaveDirectory = () => saveDirectory;
   let activeDiff = $state(initialDiff());
   let activeJobId = $state(initialJobId());
   let activeDownloadName = $state(initialDownloadName());
-  let activeSaveDirectory = $state(initialSaveDirectory());
+  let activeSaveDirectory = $state<string | null>(null);
   let expanded = $state<Set<number>>(new Set());
   let saveStatus = $state('');
   let saving = $state(false);
@@ -49,9 +48,8 @@
   let backendSaveDialogAvailable = $state(false);
   let saveMenuOpen = $state<'' | 'header' | 'dock'>('');
   let nativeCapabilityChecked = $state(false);
-  let preferSourceSaveFolder = $state(localStorage.getItem('mkworld2snap.save.start') !== 'downloads');
+  let preferSourceSaveDir = $state(true);
   let canNativeSave = $derived(hasNativeSave || backendSaveDialogAvailable);
-  let preferredSaveDirectory = $derived(preferSourceSaveFolder ? activeSaveDirectory : null);
   const saveStatusIsError = $derived(
     /\b(fail|failed|error|not found|expired|cleaned|could not|download failed)\b/i.test(saveStatus)
   );
@@ -79,6 +77,15 @@
     customValues = {};
     rebuildStatus = '';
     showChangedOnly = true;
+  });
+
+  $effect(() => {
+    try {
+      const saved = localStorage.getItem('mkworld2snap.save-source-folder');
+      if (saved !== null) preferSourceSaveDir = saved === '1';
+    } catch {
+      // localStorage may be unavailable in restricted webviews.
+    }
   });
 
   $effect(() => {
@@ -458,6 +465,19 @@
     } as Record<string, string>)[title] ?? $i18n('Items changed', { count: detailCount });
   }
 
+  function preferredSaveDirectory(): string | null {
+    return preferSourceSaveDir ? activeSaveDirectory : null;
+  }
+
+  function setPreferSourceSaveDir(value: boolean) {
+    preferSourceSaveDir = value;
+    try {
+      localStorage.setItem('mkworld2snap.save-source-folder', value ? '1' : '0');
+    } catch {
+      // localStorage may be unavailable in restricted webviews.
+    }
+  }
+
   type DesktopBridge = {
     api?: {
       save_converted_file?: (
@@ -467,11 +487,6 @@
       ) => Promise<{ ok: boolean; path?: string; error?: string; cancelled?: boolean; revealed?: boolean }>;
     };
   };
-
-  function setPreferSourceSaveFolder(value: boolean) {
-    preferSourceSaveFolder = value;
-    localStorage.setItem('mkworld2snap.save.start', value ? 'source' : 'downloads');
-  }
 
   async function waitForDesktopBridge(timeoutMs = 5000): Promise<DesktopBridge | undefined> {
     const current = (window as unknown as { pywebview?: DesktopBridge }).pywebview;
@@ -564,9 +579,9 @@
     let result: { ok: boolean; path?: string; error?: string; cancelled?: boolean; revealed?: boolean } | undefined;
     if (pywebview?.api?.save_converted_file) {
       hasNativeSave = true;
-      result = await pywebview.api.save_converted_file(activeJobId, activeDownloadName, preferredSaveDirectory);
+      result = await pywebview.api.save_converted_file(activeJobId, activeDownloadName, preferredSaveDirectory());
     } else if (backendSaveDialogAvailable) {
-      result = await saveAs(activeJobId, preferredSaveDirectory);
+      result = await saveAs(activeJobId, preferredSaveDirectory());
     } else {
       return 'unavailable';
     }
@@ -722,6 +737,18 @@
         </button>
         {#if saveMenuOpen === 'header'}
           <div class="save-menu" role="menu">
+            <label class="save-folder-toggle" title={!activeSaveDirectory ? $i18n('Source folder is not available for this file') : ''}>
+              <input
+                type="checkbox"
+                checked={preferSourceSaveDir}
+                disabled={!activeSaveDirectory}
+                onchange={(event) => setPreferSourceSaveDir(event.currentTarget.checked)}
+              />
+              <span>
+                <strong>{$i18n('Start save dialog in source folder')}</strong>
+                <small>{$i18n('Falls back to Downloads when the source folder is unknown')}</small>
+              </span>
+            </label>
             <button type="button" role="menuitem" onclick={forceNativeSave} disabled={!canNativeSave || saving} title={!canNativeSave ? $i18n('Desktop save is unavailable in this browser') : ''}>
               <Save size={15} strokeWidth={2.4} aria-hidden="true" />
               {$i18n('Save with dialog')}
@@ -730,13 +757,6 @@
               <Download size={15} strokeWidth={2.4} aria-hidden="true" />
               {$i18n('Download through browser')}
             </button>
-            <label class="save-menu-option" title={activeSaveDirectory ? activeSaveDirectory : $i18n('Source folder is not available for this file')}>
-              <input type="checkbox" checked={preferSourceSaveFolder} onchange={(event) => setPreferSourceSaveFolder(event.currentTarget.checked)} />
-              <span>
-                <strong>{$i18n('Start save dialog in source folder')}</strong>
-                <small>{activeSaveDirectory ? activeSaveDirectory : $i18n('Falls back to Downloads when the source folder is unknown')}</small>
-              </span>
-            </label>
           </div>
         {/if}
       </div>
@@ -1147,6 +1167,18 @@
       </button>
       {#if saveMenuOpen === 'dock'}
         <div class="save-menu dock-menu" role="menu">
+          <label class="save-folder-toggle" title={!activeSaveDirectory ? $i18n('Source folder is not available for this file') : ''}>
+            <input
+              type="checkbox"
+              checked={preferSourceSaveDir}
+              disabled={!activeSaveDirectory}
+              onchange={(event) => setPreferSourceSaveDir(event.currentTarget.checked)}
+            />
+            <span>
+              <strong>{$i18n('Start save dialog in source folder')}</strong>
+              <small>{$i18n('Falls back to Downloads when the source folder is unknown')}</small>
+            </span>
+          </label>
           <button type="button" role="menuitem" onclick={forceNativeSave} disabled={!canNativeSave || saving} title={!canNativeSave ? $i18n('Desktop save is unavailable in this browser') : ''}>
             <Save size={15} strokeWidth={2.4} aria-hidden="true" />
             {$i18n('Save with dialog')}
@@ -1155,13 +1187,6 @@
             <Download size={15} strokeWidth={2.4} aria-hidden="true" />
             {$i18n('Download through browser')}
           </button>
-          <label class="save-menu-option" title={activeSaveDirectory ? activeSaveDirectory : $i18n('Source folder is not available for this file')}>
-            <input type="checkbox" checked={preferSourceSaveFolder} onchange={(event) => setPreferSourceSaveFolder(event.currentTarget.checked)} />
-            <span>
-              <strong>{$i18n('Start save dialog in source folder')}</strong>
-              <small>{activeSaveDirectory ? activeSaveDirectory : $i18n('Falls back to Downloads when the source folder is unknown')}</small>
-            </span>
-          </label>
         </div>
       {/if}
     </div>
@@ -1913,47 +1938,48 @@
     background: color-mix(in srgb, var(--mint) 18%, transparent);
   }
 
-  .save-menu-option {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 9px;
+  .save-menu button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .save-folder-toggle {
+    display: flex;
     align-items: flex-start;
-    margin-top: 4px;
-    padding: 10px 12px;
-    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    gap: 10px;
+    padding: 9px 10px 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--mint) 9%, transparent);
     color: var(--text);
     cursor: pointer;
   }
 
-  .save-menu-option input {
+  .save-folder-toggle input {
     width: 16px;
     height: 16px;
     margin-top: 2px;
     accent-color: var(--accent);
   }
 
-  .save-menu-option span {
-    min-width: 0;
+  .save-folder-toggle span {
     display: grid;
-    gap: 3px;
+    gap: 2px;
   }
 
-  .save-menu-option strong {
+  .save-folder-toggle strong {
     font-size: 12px;
     line-height: 1.2;
   }
 
-  .save-menu-option small {
-    overflow: hidden;
+  .save-folder-toggle small {
     color: var(--text-muted);
     font-size: 11px;
     line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
-  .save-menu button:disabled {
-    opacity: 0.45;
+  .save-folder-toggle:has(input:disabled) {
+    opacity: 0.58;
     cursor: not-allowed;
   }
 

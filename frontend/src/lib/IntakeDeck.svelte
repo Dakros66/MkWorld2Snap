@@ -5,32 +5,20 @@
   
 
   interface Props {
-    onfile: (file: File | null, sourcePath?: string | null, sourceSize?: number | null) => void | Promise<void>;
-    onpick?: () => boolean | Promise<boolean>;
+    onfile: (file: File) => void;
     file: File | null;
-    localName?: string | null;
-    localSize?: number | null;
     disabled?: boolean;
   }
 
-  let { onfile, onpick, file = $bindable(), localName = null, localSize = null, disabled = false }: Props = $props();
+  let { onfile, file = $bindable(), disabled = false }: Props = $props();
 
   let dragOver = $state(false);
   let inputEl: HTMLInputElement | undefined = $state();
-  const displayName = $derived(file?.name ?? localName ?? '');
-  const displaySize = $derived(file ? file.size : localSize);
-  const hasSelection = $derived(!!file || !!localName);
-
-  async function requestPick() {
-    if (disabled) return;
-    if (onpick && await onpick()) return;
-    inputEl?.click();
-  }
 
   function pick(ev: Event) {
     const target = ev.currentTarget as HTMLInputElement;
     const f = target.files?.[0];
-    if (f) onfile(f, null, null);
+    if (f) onfile(f);
   }
 
   function drop(ev: DragEvent) {
@@ -38,7 +26,7 @@
     dragOver = false;
     if (disabled) return;
     const f = ev.dataTransfer?.files?.[0];
-    if (f && f.name.toLowerCase().endsWith('.3mf')) onfile(f, null, null);
+    if (f && f.name.toLowerCase().endsWith('.3mf')) onfile(f);
   }
 
   function over(ev: DragEvent) {
@@ -50,16 +38,16 @@
 <div
   class="intake-pad"
   class:intake-hover={dragOver}
-  class:intake-loaded={hasSelection}
+  class:intake-loaded={!!file}
   class:disabled
   ondragover={over}
   ondragleave={() => (dragOver = false)}
   ondrop={drop}
-  onclick={requestPick}
+  onclick={() => !disabled && inputEl?.click()}
   onkeydown={(e) => {
     if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
-      void requestPick();
+      inputEl?.click();
     }
   }}
   role="button"
@@ -76,14 +64,12 @@
     hidden
   />
 
-  {#if hasSelection}
+  {#if file}
     <div class="intake-summary">
       <div class="file-token" aria-hidden="true"><span></span></div>
-      <div class="file-name">{displayName}</div>
-      {#if typeof displaySize === 'number'}
-        <div class="meta subtle">{(displaySize / 1024 / 1024).toFixed(2)} MB</div>
-      {/if}
-      <button class="ghost" onclick={(e) => { e.stopPropagation(); onfile(null, null, null); }}>
+      <div class="file-name">{file.name}</div>
+      <div class="meta subtle">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+      <button class="ghost" onclick={(e) => { e.stopPropagation(); onfile(null as unknown as File); }}>
         <RefreshCcw size={15} strokeWidth={2.4} aria-hidden="true" />
         {$tr('Swap file')}
       </button>

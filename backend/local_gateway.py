@@ -32,7 +32,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 import yaml
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -131,15 +131,7 @@ def _failed_diagnostics() -> list[dict[str, Any]]:
 
 def _register_job(job_id: str, output_path: Path, diff_payload: dict, *, source_path: Path | None=None, reference_path: Path | None=None, settings: BuildRequestSettings | None=None, source_origin_dir: Path | None=None) -> None:
     with _JOBS_LOCK:
-        _JOBS[job_id] = {
-            'output_path': output_path,
-            'diff': diff_payload,
-            'created_at': time.time(),
-            'source_path': source_path,
-            'reference_path': reference_path,
-            'settings': settings,
-            'source_origin_dir': source_origin_dir,
-        }
+        _JOBS[job_id] = {'output_path': output_path, 'diff': diff_payload, 'created_at': time.time(), 'source_path': source_path, 'reference_path': reference_path, 'settings': settings, 'source_origin_dir': source_origin_dir}
     try:
         report = diff_payload.get('report', {}) if isinstance(diff_payload, dict) else {}
         counts = diff_payload.get('counts', {}) if isinstance(diff_payload, dict) else {}
@@ -197,28 +189,51 @@ def _source_origin_dir(raw: str | None) -> Path | None:
     if not raw or not raw.strip():
         return None
     try:
-        path = Path(raw).expanduser()
-        return path if path.is_dir() else None
+        local_00 = Path(raw).expanduser()
+        return local_00 if local_00.is_dir() else None
     except Exception:
         return None
 
-def _desktop_local_file_enabled() -> bool:
-    return os.environ.get('MKWORLD2SNAP_ENABLE_LOCAL_FILE_API', '').lower() in {'1', 'true', 'yes'}
-
-def _validate_desktop_3mf_path(raw: str) -> Path:
-    if not _desktop_local_file_enabled():
-        raise HTTPException(404, detail='desktop file access is not available')
-    if not raw or not isinstance(raw, str):
-        raise HTTPException(400, detail='source_path is required')
+def _choose_folder_with_tk(prompt: str) -> Path | None:
     try:
-        local_00 = Path(raw).expanduser()
-    except Exception as err:
-        raise HTTPException(400, detail='source_path is not valid') from err
-    if not local_00.is_file() or local_00.suffix.lower() != '.3mf':
-        raise HTTPException(400, detail='expected a local .3mf file')
-    if local_00.stat().st_size > MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(413, detail=f'file too large; max is {MAX_UPLOAD_MB} MB')
-    return local_00
+        import tkinter as tk
+        from tkinter import filedialog
+        local_00 = tk.Tk()
+        local_00.withdraw()
+        local_00.attributes('-topmost', True)
+        local_01 = filedialog.askdirectory(title=prompt)
+        local_00.destroy()
+        return Path(local_01) if local_01 else None
+    except Exception:
+        logger.exception('folder picker failed')
+        return None
+
+def _choose_folder(prompt: str) -> Path | None:
+    if sys.platform == 'darwin':
+        local_00 = '\n'.join([f'set chosenFolder to choose folder with prompt {_applescript_string(prompt)}', 'POSIX path of chosenFolder'])
+        local_01 = subprocess.run(['osascript', '-e', local_00], capture_output=True, text=True, check=False)
+        if local_01.returncode != 0:
+            return None
+        local_02 = local_01.stdout.strip()
+        return Path(local_02) if local_02 else None
+    return _choose_folder_with_tk(prompt)
+
+def _choose_folders(prompt: str) -> list[Path]:
+    if sys.platform == 'darwin':
+        local_00 = '\n'.join([
+            f'set chosenFolders to choose folder with prompt {_applescript_string(prompt)} with multiple selections allowed',
+            'set outputText to ""',
+            'repeat with chosenFolder in chosenFolders',
+            '  set outputText to outputText & POSIX path of chosenFolder & linefeed',
+            'end repeat',
+            'outputText',
+        ])
+        local_01 = subprocess.run(['osascript', '-e', local_00], capture_output=True, text=True, check=False)
+        if local_01.returncode != 0:
+            return []
+        return [Path(local_02.strip()) for local_02 in local_01.stdout.splitlines() if local_02.strip()]
+    local_03 = _choose_folder_with_tk(prompt)
+    return [local_03] if local_03 else []
 
 def _reveal_saved_file(path: Path) -> bool:
     if os.environ.get('MKWORLD2SNAP_REVEAL_SAVED', '1') == '0':
@@ -383,27 +398,13 @@ class WatchPathsPayload(BaseModel):
 class PathActionPayload(BaseModel):
     path: str
 
+class SaveDialogPayload(BaseModel):
+    preferred_directory: str | None = None
+
 class RebuildPayload(BaseModel):
     custom_overrides: dict[str, Any] = {}
     default_keys: list[str] = []
     exclude_object: bool | None = None
-
-class SaveDialogPayload(BaseModel):
-    preferred_directory: str | None = None
-
-class LocalPathPayload(BaseModel):
-    source_path: str
-
-class LocalBuildPayload(BaseModel):
-    source_path: str
-    reference_profile: str
-    apply_recipe_book: bool = True
-    clamp_speeds: bool = True
-    preserve_color_painting: bool = True
-    advanced_overrides: Any = {}
-    slot_map: dict[str, int] = {}
-    insert_swap_pauses: bool = False
-    exclude_object: bool = True
 
 def _parameter_group(key: str) -> str:
     local_00 = key.lower()
@@ -624,7 +625,7 @@ def support_pack() -> FileResponse:
 
 @app.post('/engine/folder-watch/select')
 def folder_watch_select() -> JSONResponse:
-    local_00 = _choose_folders_macos('Choose one or more folders to watch for new 3MF/STL files:')
+    local_00 = _choose_folders('Choose one or more folders to watch for new 3MF/STL files:')
     if not local_00:
         return JSONResponse({'ok': False, 'cancelled': True, **_FOLDER_WATCH.status()})
     local_01 = _FOLDER_WATCH.add_paths(local_00)
@@ -632,11 +633,14 @@ def folder_watch_select() -> JSONResponse:
 
 @app.post('/engine/folder-watch/add')
 def folder_watch_add(payload: WatchPathsPayload) -> JSONResponse:
-    local_00 = [Path(local_01).expanduser() for local_01 in payload.paths if isinstance(local_01, str) and local_01.strip()]
+    local_00: list[Path] = []
+    for local_01 in payload.paths:
+        local_02 = _source_origin_dir(local_01)
+        if local_02 is not None:
+            local_00.append(local_02)
     if not local_00:
-        return JSONResponse({'ok': False, 'cancelled': True, **_FOLDER_WATCH.status()})
-    local_02 = _FOLDER_WATCH.add_paths(local_00)
-    return JSONResponse({'ok': True, **local_02})
+        raise HTTPException(400, detail='no valid folders were provided')
+    return JSONResponse({'ok': True, **_FOLDER_WATCH.add_paths(local_00)})
 
 @app.post('/engine/folder-watch/enabled')
 def folder_watch_enabled(payload: WatchTogglePayload) -> JSONResponse:
@@ -694,7 +698,7 @@ def target_shelf_location() -> JSONResponse:
 
 @app.post('/engine/target-shelf/location/select')
 def choose_target_shelf_location() -> JSONResponse:
-    local_00 = _choose_folder_macos('Choose the folder that contains Bambu/Orca reference .3mf profiles:')
+    local_00 = _choose_folder('Choose the folder that contains Bambu/Orca reference .3mf profiles:')
     if local_00 is None:
         return JSONResponse({'ok': False, 'cancelled': True})
     local_01 = _set_target_profiles_dir(local_00)
@@ -780,54 +784,6 @@ def _parse_rule_yaml(yaml_text: str) -> RecipeDefinition:
     except Exception as err:
         raise RecipeLoadError(str(err)) from err
 
-def _inspect_3mf_path(source_path: Path, *, job_id: str, workdir: Path | None, endpoint: str, display_name: str) -> dict[str, Any]:
-    try:
-        local_03, local_04 = read_source_settings(source_path)
-    except ProfileLoadError as err:
-        if workdir is not None:
-            _retain_failed_workdir(job_id=job_id, workdir=workdir, endpoint=endpoint, filename=display_name, reference_profile='', detail=str(err), error_type=type(err).__name__, request_meta={})
-        raise HTTPException(400, detail=str(err)) from err
-    with zipfile.ZipFile(source_path) as local_05:
-        local_06 = local_05.namelist()
-        local_07 = local_05.read('3D/3dmodel.model').decode('utf-8', errors='replace') if '3D/3dmodel.model' in local_06 else ''
-    local_08 = list_profiles(PROFILES_DIR, USER_PROFILES_DIR)
-    local_09 = suggest_profile(local_08, local_03)
-    if local_09 is None:
-        raise HTTPException(404, detail='no profiles available')
-    local_10 = local_03.get('printer_model', '')
-    local_11 = 'snapmaker' in local_10.lower()
-    local_12 = local_03.get('filament_settings_id') or []
-    local_13 = local_03.get('filament_type') or []
-    local_14 = local_03.get('filament_vendor') or []
-    local_15 = local_03.get('filament_colour') or []
-    local_16 = [{'index': local_17, 'settings_id': local_12[local_17] if local_17 < len(local_12) else None, 'filament_type': local_13[local_17] if local_17 < len(local_13) else None, 'vendor': local_14[local_17] if local_17 < len(local_14) else None, 'colour': local_15[local_17] if local_17 < len(local_15) else None} for local_17 in range(len(local_12))]
-    local_18 = len(local_12)
-    local_19 = is_painted_model(local_06, local_18)
-    local_20 = re.findall('transform="([^"]+)"', local_07)
-    local_21, local_22 = ([], [])
-    for local_23 in local_20:
-        local_24 = local_23.split()
-        if len(local_24) == 12:
-            local_21.append(float(local_24[9]))
-            local_22.append(float(local_24[10]))
-    local_25 = bool(local_21) and (max(local_21) - min(local_21) > _MULTIPLATE_SPAN_MM or max(local_22) - min(local_22) > _MULTIPLATE_SPAN_MM)
-    local_26 = local_03.get('printable_area') or ['0x0']
-    local_27 = [float(local_28.split('x')[0]) for local_28 in local_26]
-    local_29 = [float(local_28.split('x')[1]) for local_28 in local_26]
-    local_30 = max(local_27) - min(local_27) > 270.0 or max(local_29) - min(local_29) > 270.0
-    local_31 = any((local_32 == '1' for local_32 in local_03.get('filament_is_mixed') or []))
-    local_34 = _lint_source_settings(local_03)
-    if local_11:
-        local_33 = None
-    elif local_04 is not None:
-        local_33 = local_04
-    elif local_10.lower().startswith('bambu lab'):
-        local_33 = None
-    else:
-        local_33 = local_10 or 'Unknown slicer'
-    logger.info('SUGGEST %s  lh=%s  pid=%r  printer=%r  already_converted=%s  filaments=%d  painted=%s  target=%s', display_name, local_03.get('layer_height'), local_03.get('print_settings_id'), local_10, local_11, local_18, local_19, local_09.display_name)
-    return {'profile_id': local_09.id, 'display_name': local_09.display_name, 'source_printer': local_10, 'already_converted': local_11, 'filaments': local_16, 'is_painted_model': local_19, 'is_multiplate': local_25, 'is_oversized': local_30, 'is_colour_mixed': local_31, 'source_slicer': local_33, 'lint_issues': local_34, 'matched_on': {'layer_height': local_03.get('layer_height'), 'print_settings_id': local_03.get('print_settings_id')}}
-
 @app.post('/engine/intake/inspect')
 async def inspect_intake_file(file: UploadFile=File(...)) -> dict[str, Any]:
     if not file.filename or not file.filename.lower().endswith('.3mf'):
@@ -838,40 +794,69 @@ async def inspect_intake_file(file: UploadFile=File(...)) -> dict[str, Any]:
     local_02 = local_01 / file.filename
     _save_upload(file, local_02)
     try:
-        return _inspect_3mf_path(local_02, job_id=local_00, workdir=local_01, endpoint='/engine/intake/inspect', display_name=file.filename)
+        try:
+            local_03, local_04 = read_source_settings(local_02)
+        except ProfileLoadError as err:
+            _retain_failed_workdir(job_id=local_00, workdir=local_01, endpoint='/engine/intake/inspect', filename=file.filename, reference_profile='', detail=str(err), error_type=type(err).__name__, request_meta={})
+            raise HTTPException(400, detail=str(err)) from err
+        with zipfile.ZipFile(local_02) as local_05:
+            local_06 = local_05.namelist()
+            local_07 = local_05.read('3D/3dmodel.model').decode('utf-8', errors='replace') if '3D/3dmodel.model' in local_06 else ''
+        local_08 = list_profiles(PROFILES_DIR, USER_PROFILES_DIR)
+        local_09 = suggest_profile(local_08, local_03)
+        if local_09 is None:
+            raise HTTPException(404, detail='no profiles available')
+        local_10 = local_03.get('printer_model', '')
+        local_11 = 'snapmaker' in local_10.lower()
+        local_12 = local_03.get('filament_settings_id') or []
+        local_13 = local_03.get('filament_type') or []
+        local_14 = local_03.get('filament_vendor') or []
+        local_15 = local_03.get('filament_colour') or []
+        local_16 = [{'index': local_17, 'settings_id': local_12[local_17] if local_17 < len(local_12) else None, 'filament_type': local_13[local_17] if local_17 < len(local_13) else None, 'vendor': local_14[local_17] if local_17 < len(local_14) else None, 'colour': local_15[local_17] if local_17 < len(local_15) else None} for local_17 in range(len(local_12))]
+        local_18 = len(local_12)
+        local_19 = is_painted_model(local_06, local_18)
+        import re as _re
+        local_20 = _re.findall('transform="([^"]+)"', local_07)
+        local_21, local_22 = ([], [])
+        for local_23 in local_20:
+            local_24 = local_23.split()
+            if len(local_24) == 12:
+                local_21.append(float(local_24[9]))
+                local_22.append(float(local_24[10]))
+        local_25 = bool(local_21) and (max(local_21) - min(local_21) > _MULTIPLATE_SPAN_MM or max(local_22) - min(local_22) > _MULTIPLATE_SPAN_MM)
+        local_26 = local_03.get('printable_area') or ['0x0']
+        local_27 = [float(local_28.split('x')[0]) for local_28 in local_26]
+        local_29 = [float(local_28.split('x')[1]) for local_28 in local_26]
+        local_30 = max(local_27) - min(local_27) > 270.0 or max(local_29) - min(local_29) > 270.0
+        local_31 = any((local_32 == '1' for local_32 in local_03.get('filament_is_mixed') or []))
+        local_34 = _lint_source_settings(local_03)
+        if local_11:
+            local_33 = None
+        elif local_04 is not None:
+            local_33 = local_04
+        elif local_10.lower().startswith('bambu lab'):
+            local_33 = None
+        else:
+            local_33 = local_10 or 'Unknown slicer'
+        logger.info('SUGGEST %s  lh=%s  pid=%r  printer=%r  already_converted=%s  filaments=%d  painted=%s  target=%s', file.filename, local_03.get('layer_height'), local_03.get('print_settings_id'), local_10, local_11, local_18, local_19, local_09.display_name)
+        return {'profile_id': local_09.id, 'display_name': local_09.display_name, 'source_printer': local_10, 'already_converted': local_11, 'filaments': local_16, 'is_painted_model': local_19, 'is_multiplate': local_25, 'is_oversized': local_30, 'is_colour_mixed': local_31, 'source_slicer': local_33, 'lint_issues': local_34, 'matched_on': {'layer_height': local_03.get('layer_height'), 'print_settings_id': local_03.get('print_settings_id')}}
     finally:
         shutil.rmtree(local_01, ignore_errors=True)
 
-@app.post('/engine/desktop/intake/inspect')
-def inspect_desktop_file(payload: LocalPathPayload) -> dict[str, Any]:
-    local_00 = _validate_desktop_3mf_path(payload.source_path)
-    return _inspect_3mf_path(local_00, job_id=uuid.uuid4().hex, workdir=None, endpoint='/engine/desktop/intake/inspect', display_name=local_00.name)
-
 @app.post('/engine/intake/scene')
-async def intake_scene(file: UploadFile=File(...), max_triangles: int=Query(700000, ge=1000, le=700000)) -> JSONResponse:
+async def intake_scene(file: UploadFile=File(...)) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith('.3mf'):
         raise HTTPException(400, detail='expected a .3mf upload')
     with tempfile.TemporaryDirectory(dir=TMP_DIR) as local_00:
         local_01 = Path(local_00) / file.filename
         _save_upload(file, local_01, size_limit_bytes=MAX_UPLOAD_MB * 1024 * 1024)
         try:
-            return JSONResponse(build_preview_scene(local_01, max_triangles=max_triangles))
+            return JSONResponse(build_preview_scene(local_01))
         except ProfileLoadError as err:
             raise HTTPException(400, detail=str(err)) from err
         except Exception as err:
             logger.exception('intake scene extraction failed')
             raise HTTPException(500, detail=f'scene extraction failed: {err}') from err
-
-@app.post('/engine/desktop/intake/scene')
-def desktop_intake_scene(payload: LocalPathPayload, max_triangles: int=Query(700000, ge=1000, le=700000)) -> JSONResponse:
-    local_00 = _validate_desktop_3mf_path(payload.source_path)
-    try:
-        return JSONResponse(build_preview_scene(local_00, max_triangles=max_triangles))
-    except ProfileLoadError as err:
-        raise HTTPException(400, detail=str(err)) from err
-    except Exception as err:
-        logger.exception('desktop intake scene extraction failed')
-        raise HTTPException(500, detail=f'scene extraction failed: {err}') from err
 
 @app.post('/engine/jobs/u1')
 async def build_u1_job(file: UploadFile=File(...), reference_profile: str=Form(...), apply_recipe_book: bool=Form(True), clamp_speeds: bool=Form(True), preserve_color_painting: bool=Form(True), advanced_overrides: str=Form('{}'), slot_map: str=Form('{}'), insert_swap_pauses: str=Form('false'), exclude_object: str=Form('true'), source_directory: str=Form('')) -> JSONResponse:
@@ -900,7 +885,6 @@ async def build_u1_job(file: UploadFile=File(...), reference_profile: str=Form(.
     local_08 = TMP_DIR / local_07
     local_08.mkdir(parents=True)
     local_09 = local_08 / file.filename
-    local_17 = _source_origin_dir(source_directory)
     _save_upload(file, local_09, size_limit_bytes=MAX_UPLOAD_MB * 1024 * 1024)
     local_10 = f'{Path(file.filename).stem}-U1.3mf'
     local_11 = local_08 / local_10
@@ -917,50 +901,9 @@ async def build_u1_job(file: UploadFile=File(...), reference_profile: str=Form(.
         raise HTTPException(500, detail=f'conversion failed: {err}') from err
     local_15 = local_14.diff.counts()
     local_16 = {'report': local_14.diff.model_dump(), 'sections': compose_report_sections(local_14.diff), 'counts': local_15}
+    local_17 = _source_origin_dir(source_directory)
     _register_job(local_07, local_11, local_16, source_path=local_09, reference_path=Path(local_06.path), settings=local_12, source_origin_dir=local_17)
     return JSONResponse({'job_id': local_07, 'download_name': local_10, 'diff': local_16, 'save_directory': str(local_17) if local_17 else None})
-
-@app.post('/engine/desktop/jobs/u1')
-def build_desktop_u1_job(payload: LocalBuildPayload) -> JSONResponse:
-    local_00 = _validate_desktop_3mf_path(payload.source_path)
-    try:
-        local_01 = yaml.safe_load(payload.advanced_overrides) if isinstance(payload.advanced_overrides, str) else payload.advanced_overrides
-        local_01 = local_01 or {}
-        if not isinstance(local_01, dict):
-            raise ValueError('must be a mapping')
-    except (ValueError, yaml.YAMLError) as err:
-        raise HTTPException(400, detail=f'bad advanced_overrides: {err}') from err
-    try:
-        local_02: dict[int, int] = {int(local_03): int(local_04) for local_03, local_04 in (payload.slot_map or {}).items()}
-    except (ValueError, TypeError) as err:
-        raise HTTPException(400, detail=f'bad slot_map: {err}') from err
-    if any((local_04 < 0 or local_04 >= _MAX_TOOLHEADS for local_04 in local_02.values())):
-        raise HTTPException(400, detail='slot_map values must be 0–3')
-    try:
-        local_05 = resolve_profile(payload.reference_profile, PROFILES_DIR, USER_PROFILES_DIR)
-    except ProfileNotFoundError as err:
-        raise HTTPException(404, detail=str(err)) from err
-    local_06 = uuid.uuid4().hex
-    local_07 = TMP_DIR / local_06
-    local_07.mkdir(parents=True)
-    local_08 = local_07 / local_00.name
-    shutil.copy2(local_00, local_08)
-    local_09 = f'{local_00.stem}-U1.3mf'
-    local_10 = local_07 / local_09
-    local_11 = BuildRequestSettings(reference_profile=local_05.id, apply_recipe_book=payload.apply_recipe_book, clamp_speeds=payload.clamp_speeds, preserve_color_painting=payload.preserve_color_painting, advanced_overrides=local_01, slot_map=local_02, insert_swap_pauses=payload.insert_swap_pauses, exclude_object=payload.exclude_object)
-    local_12 = load_recipe_book(RULES_DIR)
-    try:
-        local_13 = forge_package(source_path=local_08, reference_path=Path(local_05.path), output_path=local_10, settings=local_11, rules=local_12)
-    except ProfileLoadError as err:
-        _retain_failed_workdir(job_id=local_06, workdir=local_07, endpoint='/engine/desktop/jobs/u1', filename=local_00.name, reference_profile=local_05.id, detail=str(err), error_type=type(err).__name__, request_meta={'source_path': str(local_00), 'apply_recipe_book': payload.apply_recipe_book, 'clamp_speeds': payload.clamp_speeds, 'preserve_color_painting': payload.preserve_color_painting, 'slot_map': local_02, 'insert_swap_pauses': payload.insert_swap_pauses})
-        raise HTTPException(400, detail=str(err)) from err
-    except Exception as err:
-        _retain_failed_workdir(job_id=local_06, workdir=local_07, endpoint='/engine/desktop/jobs/u1', filename=local_00.name, reference_profile=local_05.id, detail=str(err), error_type=type(err).__name__, request_meta={'source_path': str(local_00), 'apply_recipe_book': payload.apply_recipe_book, 'clamp_speeds': payload.clamp_speeds, 'preserve_color_painting': payload.preserve_color_painting, 'slot_map': local_02, 'insert_swap_pauses': payload.insert_swap_pauses})
-        logger.exception('desktop conversion failed')
-        raise HTTPException(500, detail=f'conversion failed: {err}') from err
-    local_14 = {'report': local_13.diff.model_dump(), 'sections': compose_report_sections(local_13.diff), 'counts': local_13.diff.counts()}
-    _register_job(local_06, local_10, local_14, source_path=local_08, reference_path=Path(local_05.path), settings=local_11, source_origin_dir=local_00.parent)
-    return JSONResponse({'job_id': local_06, 'download_name': local_09, 'diff': local_14, 'save_directory': str(local_00.parent)})
 
 def _coerce_override_value(key: str, raw_value: Any, reference_value: Any) -> Any:
     if isinstance(reference_value, list):
@@ -1046,8 +989,9 @@ def rebuild_u1_job(job_id: str, payload: RebuildPayload) -> JSONResponse:
         logger.exception('rebuild failed')
         raise HTTPException(500, detail=f'rebuild failed: {err}') from err
     local_15 = {'report': local_14.diff.model_dump(), 'sections': compose_report_sections(local_14.diff), 'counts': local_14.diff.counts()}
-    _register_job(local_10, local_13, local_15, source_path=local_12, reference_path=local_02, settings=local_09, source_origin_dir=local_00.get('source_origin_dir'))
-    return JSONResponse({'job_id': local_10, 'download_name': local_13.name, 'diff': local_15, 'save_directory': str(local_00.get('source_origin_dir')) if local_00.get('source_origin_dir') else None})
+    local_16 = local_00.get('source_origin_dir')
+    _register_job(local_10, local_13, local_15, source_path=local_12, reference_path=local_02, settings=local_09, source_origin_dir=local_16 if isinstance(local_16, Path) else None)
+    return JSONResponse({'job_id': local_10, 'download_name': local_13.name, 'diff': local_15, 'save_directory': str(local_16) if isinstance(local_16, Path) else None})
 
 @app.post('/engine/jobs/target-profile')
 async def build_target_profile_job(file: UploadFile=File(...), reference_profile: str=Form(...), apply_recipe_book: bool=Form(True), clamp_speeds: bool=Form(True), preserve_color_painting: bool=Form(True), advanced_overrides: str=Form('{}'), insert_swap_pauses: str=Form('false')) -> JSONResponse:
@@ -1113,7 +1057,7 @@ def job_summary(job_id: str) -> JSONResponse:
     if not local_01.exists():
         raise HTTPException(410, detail='output file was cleaned up')
     local_02 = local_00.get('source_origin_dir')
-    return JSONResponse({'job_id': job_id, 'download_name': local_01.name, 'diff': local_00['diff'], 'save_directory': str(local_02) if local_02 else None})
+    return JSONResponse({'job_id': job_id, 'download_name': local_01.name, 'diff': local_00['diff'], 'save_directory': str(local_02) if isinstance(local_02, Path) else None})
 
 @app.get('/engine/jobs/{job_id}/scene')
 def job_scene(job_id: str) -> JSONResponse:
@@ -1173,21 +1117,24 @@ def job_parameters(job_id: str) -> JSONResponse:
     })
 
 @app.post('/engine/jobs/{job_id}/save-dialog')
-def save_job_with_dialog(job_id: str, payload: SaveDialogPayload | None = None) -> JSONResponse:
+def save_job_with_dialog(job_id: str, payload: SaveDialogPayload | None=None) -> JSONResponse:
     local_00 = _get_job(job_id)
     if local_00 is None:
         raise HTTPException(404, detail='job expired or not found')
     local_01: Path = local_00['output_path']
     if not local_01.exists():
         raise HTTPException(410, detail='output file was cleaned up')
-    local_04 = _source_origin_dir(payload.preferred_directory) if payload is not None else local_00.get('source_origin_dir')
-    local_02 = _choose_save_path(local_01.name, local_04)
+    local_02 = _source_origin_dir(payload.preferred_directory if payload else None)
     if local_02 is None:
+        local_03 = local_00.get('source_origin_dir')
+        local_02 = local_03 if isinstance(local_03, Path) else None
+    local_04 = _choose_save_path(local_01.name, local_02)
+    if local_04 is None:
         return JSONResponse({'ok': False, 'cancelled': True})
-    local_02.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(local_01, local_02)
-    local_03 = _reveal_saved_file(local_02)
-    return JSONResponse({'ok': True, 'path': str(local_02), 'revealed': local_03})
+    local_04.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(local_01, local_04)
+    local_05 = _reveal_saved_file(local_04)
+    return JSONResponse({'ok': True, 'path': str(local_04), 'revealed': local_05})
 
 def _save_upload(file: UploadFile, dst: Path, *, size_limit_bytes: int | None=None) -> None:
     local_00 = 0

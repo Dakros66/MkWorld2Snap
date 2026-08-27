@@ -22,9 +22,6 @@ dist/
 build_logs/
 .tools/
 desktop_data/
-settings.json
-conversion_history.json
-filament_library_cache.json
 
 # packaged release outputs
 release/
@@ -51,8 +48,6 @@ target_profiles/*
 
 # editors / os
 .DS_Store
-Thumbs.db
-Desktop.ini
 .idea/
 .vscode/
 

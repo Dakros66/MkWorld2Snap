@@ -1,13 +1,10 @@
 <script module lang="ts">
-  import type { WatchStatus as WatchStatusShape } from './engineClient';
-
   declare global {
     interface Window {
       pywebview?: {
         api?: {
           autostart_status?: () => Promise<{ supported: boolean; enabled: boolean; path?: string; error?: string }>;
           set_autostart?: (enabled: boolean) => Promise<{ supported: boolean; enabled: boolean; path?: string; error?: string }>;
-          choose_watch_folders?: () => Promise<WatchStatusShape & { ok: boolean; cancelled?: boolean; error?: string }>;
         };
       };
     }
@@ -79,14 +76,24 @@
     busy = true;
     error = '';
     try {
-      const api = desktopApi();
-      const next = api?.choose_watch_folders ? await api.choose_watch_folders() : await chooseWatchFolders();
-      if (next.cancelled) {
-        if (next.error) error = next.error;
-        else if (!api?.choose_watch_folders) error = $tr('Folder picking is only available from the desktop app on this platform.');
-      } else {
-        status = next;
-      }
+      const next = await chooseWatchFolders();
+      if (!next.cancelled) status = next;
+      else error = $tr('Folder picker is not available here. Enter the folder path manually.');
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function addManualFolder() {
+    const path = manualPath.trim();
+    if (!path) return;
+    busy = true;
+    error = '';
+    try {
+      status = await addWatchFolders([path]);
+      manualPath = '';
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -123,25 +130,6 @@
     error = '';
     try {
       status = await scanWatchFolders();
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function addManualPath(event: SubmitEvent) {
-    event.preventDefault();
-    const path = manualPath.trim();
-    if (!path) return;
-    busy = true;
-    error = '';
-    try {
-      const next = await addWatchFolders([path]);
-      if (!next.cancelled) {
-        status = next;
-        manualPath = '';
-      }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -301,15 +289,16 @@
     <div class="watch-error" role="alert">{error}</div>
   {/if}
 
-  <form class="watch-manual-path" onsubmit={addManualPath}>
+  <form class="watch-manual" onsubmit={(event) => { event.preventDefault(); void addManualFolder(); }}>
     <input
       type="text"
       bind:value={manualPath}
       placeholder={$tr('Folder path on this computer or server')}
       aria-label={$tr('Folder path on this computer or server')}
+      disabled={busy}
     />
-    <button class="ghost" type="submit" disabled={busy || !manualPath.trim()}>
-      <FolderPlus size={15} strokeWidth={2.4} aria-hidden="true" />
+    <button class="ghost watch-button" type="submit" disabled={busy || !manualPath.trim()}>
+      <FolderPlus size={16} strokeWidth={2.4} aria-hidden="true" />
       {$tr('Add path')}
     </button>
   </form>
@@ -500,6 +489,32 @@
     flex: 0 0 auto;
   }
 
+  .watch-manual {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .watch-manual input {
+    min-width: 0;
+    min-height: 40px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-raised) 86%, transparent);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    outline: none;
+  }
+
+  .watch-manual input:focus {
+    border-color: color-mix(in srgb, var(--mint) 70%, var(--ink));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 18%, transparent);
+  }
+
   .watch-button,
   .icon-only,
   .tiny-icon {
@@ -520,32 +535,6 @@
     color: #fffdf8;
     background: var(--accent);
     border-color: var(--ink);
-  }
-
-  .watch-manual-path {
-    display: grid;
-    grid-template-columns: minmax(180px, 1fr) auto;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .watch-manual-path input {
-    min-width: 0;
-    min-height: 40px;
-    padding: 9px 12px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
-    color: var(--text);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 750;
-  }
-
-  .watch-manual-path button {
-    min-height: 40px;
-    padding: 9px 12px;
-    font-weight: 900;
   }
 
   .icon-only {
@@ -889,12 +878,12 @@
       flex-wrap: wrap;
     }
 
-    .watch-button {
-      flex: 1 1 auto;
+    .watch-manual {
+      grid-template-columns: 1fr;
     }
 
-    .watch-manual-path {
-      grid-template-columns: 1fr;
+    .watch-button {
+      flex: 1 1 auto;
     }
 
     .watch-row {

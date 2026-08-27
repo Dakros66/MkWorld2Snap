@@ -51,8 +51,8 @@ export interface DiffPayload {
 export interface ConvertResult {
   job_id: string;
   download_name: string;
-  save_directory?: string | null;
   diff: DiffPayload;
+  save_directory?: string | null;
 }
 
 export interface EnginePing {
@@ -216,37 +216,12 @@ export interface LintIssue {
   message: string;
 }
 
-export interface ProfileSuggestion {
-  profile_id: string;
-  display_name: string;
-  source_printer: string;
-  already_converted: boolean;
-  filaments: FilamentInfo[];
-  is_painted_model: boolean;
-  is_multiplate: boolean;
-  is_oversized: boolean;
-  is_colour_mixed: boolean;
-  source_slicer: string | null;
-  lint_issues: LintIssue[];
-  matched_on: Record<string, unknown>;
-}
-
 export async function suggestProfile(
   file: File,
-): Promise<ProfileSuggestion> {
+): Promise<{ profile_id: string; display_name: string; source_printer: string; already_converted: boolean; filaments: FilamentInfo[]; is_painted_model: boolean; is_multiplate: boolean; is_oversized: boolean; is_colour_mixed: boolean; source_slicer: string | null; lint_issues: LintIssue[]; matched_on: Record<string, unknown> }> {
   const form = new FormData();
   form.append('file', file);
   return handle(await fetch('/engine/intake/inspect', { method: 'POST', body: form }));
-}
-
-export async function inspectLocalPath(sourcePath: string): Promise<ProfileSuggestion> {
-  return handle(
-    await fetch('/engine/desktop/intake/inspect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source_path: sourcePath }),
-    }),
-  );
 }
 
 export async function listRules(): Promise<RuleSummary[]> {
@@ -314,10 +289,6 @@ export interface ConvertOptions {
   source_directory?: string | null;
 }
 
-export type LocalConvertOptions = Omit<ConvertOptions, 'file' | 'source_directory'> & {
-  source_path: string;
-};
-
 export async function convert(opts: ConvertOptions): Promise<ConvertResult> {
   const form = new FormData();
   form.append('file', opts.file);
@@ -331,26 +302,6 @@ export async function convert(opts: ConvertOptions): Promise<ConvertResult> {
   form.append('exclude_object', String(opts.exclude_object));
   if (opts.source_directory) form.append('source_directory', opts.source_directory);
   return handle(await fetch('/engine/jobs/u1', { method: 'POST', body: form }));
-}
-
-export async function convertLocalPath(opts: LocalConvertOptions): Promise<ConvertResult> {
-  return handle(
-    await fetch('/engine/desktop/jobs/u1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source_path: opts.source_path,
-        reference_profile: opts.reference_profile,
-        apply_recipe_book: opts.apply_rules,
-        clamp_speeds: opts.clamp_speeds,
-        preserve_color_painting: opts.preserve_color_painting,
-        advanced_overrides: opts.advanced_overrides,
-        slot_map: opts.slot_map ?? {},
-        insert_swap_pauses: opts.insert_swap_pauses,
-        exclude_object: opts.exclude_object,
-      }),
-    }),
-  );
 }
 
 export async function listTargetShelfProfiles(): Promise<Array<{id: string; name: string}>> {
@@ -396,22 +347,10 @@ export async function jobParameters(jobId: string): Promise<JobParameters> {
   return handle(await fetch(`/engine/jobs/${encodeURIComponent(jobId)}/parameters`));
 }
 
-export async function previewUploadScene(file: File, maxTriangles?: number): Promise<PreviewScene> {
+export async function previewUploadScene(file: File): Promise<PreviewScene> {
   const form = new FormData();
   form.append('file', file);
-  const url = maxTriangles ? `/engine/intake/scene?max_triangles=${encodeURIComponent(String(maxTriangles))}` : '/engine/intake/scene';
-  return handle(await fetch(url, { method: 'POST', body: form }));
-}
-
-export async function previewLocalPathScene(sourcePath: string, maxTriangles?: number): Promise<PreviewScene> {
-  const url = maxTriangles ? `/engine/desktop/intake/scene?max_triangles=${encodeURIComponent(String(maxTriangles))}` : '/engine/desktop/intake/scene';
-  return handle(
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source_path: sourcePath }),
-    }),
-  );
+  return handle(await fetch('/engine/intake/scene', { method: 'POST', body: form }));
 }
 
 export async function saveAs(jobId: string, preferredDirectory?: string | null): Promise<{ ok: boolean; path?: string; revealed?: boolean; cancelled?: boolean }> {
@@ -419,7 +358,7 @@ export async function saveAs(jobId: string, preferredDirectory?: string | null):
     await fetch(`/engine/jobs/${encodeURIComponent(jobId)}/save-dialog`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ preferred_directory: preferredDirectory ?? '' }),
+      body: JSON.stringify({ preferred_directory: preferredDirectory ?? null }),
     }),
   );
 }
@@ -441,11 +380,11 @@ export async function folderWatchStatus(): Promise<WatchStatus> {
   return handle(await fetch('/engine/folder-watch'));
 }
 
-export async function chooseWatchFolders(): Promise<(WatchStatus & { ok: boolean; cancelled?: boolean; error?: string })> {
+export async function chooseWatchFolders(): Promise<(WatchStatus & { ok: boolean; cancelled?: boolean })> {
   return handle(await fetch('/engine/folder-watch/select', { method: 'POST' }));
 }
 
-export async function addWatchFolders(paths: string[]): Promise<(WatchStatus & { ok: boolean; cancelled?: boolean; error?: string })> {
+export async function addWatchFolders(paths: string[]): Promise<(WatchStatus & { ok: boolean })> {
   return handle(
     await fetch('/engine/folder-watch/add', {
       method: 'POST',
