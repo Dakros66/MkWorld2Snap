@@ -63,7 +63,7 @@
     }
   }
 
-  async function onFile(f: File) {
+  async function onFile(f: File | null) {
     file = f;
     phase = f ? 'ready' : 'idle';
     result = null;

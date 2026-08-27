@@ -3,13 +3,14 @@
   import { Box, Crosshair, Eye, RotateCcw } from 'lucide-svelte';
   import * as THREE from 'three';
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-  import { previewScene, previewSourceScene, previewUploadScene, type PreviewScene } from './engineClient';
+  import { previewLocalPathScene, previewScene, previewSourceScene, previewUploadScene, type PreviewScene } from './engineClient';
   import { tr } from './i18n';
 
   interface Props {
     jobId?: string;
     sourceJob?: boolean;
     file?: File | null;
+    sourcePath?: string | null;
     compact?: boolean;
     heading?: string;
     eyebrow?: string;
@@ -19,6 +20,7 @@
     jobId,
     sourceJob = false,
     file = null,
+    sourcePath = null,
     compact = false,
     heading = 'Plate layout',
     eyebrow = '3D build preview',
@@ -61,6 +63,8 @@
     try {
       if (jobId) {
         sceneData = sourceJob ? await previewSourceScene(jobId) : await previewScene(jobId);
+      } else if (sourcePath) {
+        sceneData = await previewLocalPathScene(sourcePath);
       } else if (file) {
         sceneData = await previewUploadScene(file);
       } else {

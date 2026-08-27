@@ -191,6 +191,7 @@ def _publish_env(paths: RuntimePaths) -> None:
             "MKWORLD2SNAP_RULES": str(paths.recipes),
             "MKWORLD2SNAP_TMP": str(paths.tmp),
             "MKWORLD2SNAP_USER_PROFILES": str(paths.user_profiles),
+            "MKWORLD2SNAP_ENABLE_LOCAL_FILE_API": "1",
             "DOMAINHOST": "localhost",
             "MAX_UPLOAD_MB": os.environ.get("MAX_UPLOAD_MB", "500"),
         }
@@ -370,6 +371,45 @@ class NativeWindowBridge:
         except urllib.error.HTTPError as exc:
             return {"ok": False, "error": f"Download failed: HTTP {exc.code}"}
         except Exception as exc:  # noqa: BLE001 - UI should receive the real failure text
+            return {"ok": False, "error": str(exc)}
+
+    def choose_project_file(self) -> dict[str, Any]:
+        try:
+            import webview
+
+            window = webview.windows[0] if webview.windows else None
+            if window is None:
+                return {"ok": False, "cancelled": True, "error": "No desktop window is available."}
+
+            try:
+                selection = window.create_file_dialog(
+                    webview.OPEN_DIALOG,
+                    directory=str(Path.home()),
+                    allow_multiple=False,
+                    file_types=("3MF project (*.3mf)", "All files (*.*)"),
+                )
+            except TypeError:
+                selection = window.create_file_dialog(
+                    webview.OPEN_DIALOG,
+                    directory=str(Path.home()),
+                    file_types=("3MF project (*.3mf)", "All files (*.*)"),
+                )
+            if not selection:
+                return {"ok": False, "cancelled": True}
+
+            raw_path = selection[0] if isinstance(selection, (list, tuple)) else selection
+            path = Path(raw_path).expanduser()
+            if not path.is_file() or path.suffix.lower() != ".3mf":
+                return {"ok": False, "error": "Please choose a .3mf file."}
+
+            return {
+                "ok": True,
+                "path": str(path),
+                "name": path.name,
+                "size": path.stat().st_size,
+                "directory": str(path.parent),
+            }
+        except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": str(exc)}
 
     def save_text_file(self, suggested_name: str, content: str) -> dict[str, Any]:

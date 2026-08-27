@@ -216,12 +216,37 @@ export interface LintIssue {
   message: string;
 }
 
+export interface ProfileSuggestion {
+  profile_id: string;
+  display_name: string;
+  source_printer: string;
+  already_converted: boolean;
+  filaments: FilamentInfo[];
+  is_painted_model: boolean;
+  is_multiplate: boolean;
+  is_oversized: boolean;
+  is_colour_mixed: boolean;
+  source_slicer: string | null;
+  lint_issues: LintIssue[];
+  matched_on: Record<string, unknown>;
+}
+
 export async function suggestProfile(
   file: File,
-): Promise<{ profile_id: string; display_name: string; source_printer: string; already_converted: boolean; filaments: FilamentInfo[]; is_painted_model: boolean; is_multiplate: boolean; is_oversized: boolean; is_colour_mixed: boolean; source_slicer: string | null; lint_issues: LintIssue[]; matched_on: Record<string, unknown> }> {
+): Promise<ProfileSuggestion> {
   const form = new FormData();
   form.append('file', file);
   return handle(await fetch('/engine/intake/inspect', { method: 'POST', body: form }));
+}
+
+export async function inspectLocalPath(sourcePath: string): Promise<ProfileSuggestion> {
+  return handle(
+    await fetch('/engine/desktop/intake/inspect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_path: sourcePath }),
+    }),
+  );
 }
 
 export async function listRules(): Promise<RuleSummary[]> {
@@ -289,6 +314,10 @@ export interface ConvertOptions {
   source_directory?: string | null;
 }
 
+export type LocalConvertOptions = Omit<ConvertOptions, 'file' | 'source_directory'> & {
+  source_path: string;
+};
+
 export async function convert(opts: ConvertOptions): Promise<ConvertResult> {
   const form = new FormData();
   form.append('file', opts.file);
@@ -302,6 +331,26 @@ export async function convert(opts: ConvertOptions): Promise<ConvertResult> {
   form.append('exclude_object', String(opts.exclude_object));
   if (opts.source_directory) form.append('source_directory', opts.source_directory);
   return handle(await fetch('/engine/jobs/u1', { method: 'POST', body: form }));
+}
+
+export async function convertLocalPath(opts: LocalConvertOptions): Promise<ConvertResult> {
+  return handle(
+    await fetch('/engine/desktop/jobs/u1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_path: opts.source_path,
+        reference_profile: opts.reference_profile,
+        apply_recipe_book: opts.apply_rules,
+        clamp_speeds: opts.clamp_speeds,
+        preserve_color_painting: opts.preserve_color_painting,
+        advanced_overrides: opts.advanced_overrides,
+        slot_map: opts.slot_map ?? {},
+        insert_swap_pauses: opts.insert_swap_pauses,
+        exclude_object: opts.exclude_object,
+      }),
+    }),
+  );
 }
 
 export async function listTargetShelfProfiles(): Promise<Array<{id: string; name: string}>> {
@@ -351,6 +400,16 @@ export async function previewUploadScene(file: File): Promise<PreviewScene> {
   const form = new FormData();
   form.append('file', file);
   return handle(await fetch('/engine/intake/scene', { method: 'POST', body: form }));
+}
+
+export async function previewLocalPathScene(sourcePath: string): Promise<PreviewScene> {
+  return handle(
+    await fetch('/engine/desktop/intake/scene', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_path: sourcePath }),
+    }),
+  );
 }
 
 export async function saveAs(jobId: string, preferredDirectory?: string | null): Promise<{ ok: boolean; path?: string; revealed?: boolean; cancelled?: boolean }> {

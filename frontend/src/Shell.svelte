@@ -12,7 +12,7 @@
   import ProfileManager from './lib/ProfileManager.svelte';
   import MaintenancePanel from './lib/MaintenancePanel.svelte';
   import FilamentStudio from './lib/FilamentStudio.svelte';
-  import { listProfiles, suggestProfile, convert, getJob, type ProfileDescriptor, type ConvertResult, type LintIssue } from './lib/engineClient';
+  import { convert, convertLocalPath, getJob, inspectLocalPath, listProfiles, suggestProfile, type ConvertResult, type LintIssue, type ProfileDescriptor } from './lib/engineClient';
   import HeadMapDialog from './lib/HeadMapDialog.svelte';
   import { Boxes, BookOpen, Files, FlaskConical, History, Moon, PackageOpen, Route, Settings, Sun } from 'lucide-svelte';
   import { locale, localeOptions, tr } from './lib/i18n';
@@ -82,6 +82,9 @@
   let analysing = $state(false);
   let analyseAttempted = $state(false);
   let file = $state<File | null>(null);
+  let selectedLocalPath = $state<string | null>(null);
+  let selectedLocalName = $state<string | null>(null);
+  let selectedLocalSize = $state<number | null>(null);
   let result = $state<ConvertResult | null>(null);
   let convertError = $state('');
   let analyseError = $state('');
@@ -91,6 +94,10 @@
   let batchResults = $state<Array<{ name: string; status: 'done' | 'failed' | 'skipped'; message: string; jobId?: string }>>([]);
 
   type FileWithRuntimePath = File & { path?: string; mozFullPath?: string };
+  type NativePickedFile = { ok: boolean; path?: string; name?: string; size?: number; cancelled?: boolean; error?: string };
+  type NativeDesktopApi = {
+    choose_project_file?: () => Promise<NativePickedFile>;
+  };
 
   function sourceDirectoryFor(entry: File | null): string | null {
     if (!entry) return null;
@@ -98,6 +105,11 @@
     if (!fullPath || typeof fullPath !== 'string') return null;
     const lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
     return lastSlash > 0 ? fullPath.slice(0, lastSlash) : null;
+  }
+
+  function desktopApi(): NativeDesktopApi | null {
+    const candidate = (window as typeof window & { pywebview?: { api?: NativeDesktopApi } }).pywebview?.api;
+    return candidate ?? null;
   }
 
   // build controls
@@ -191,15 +203,15 @@
     }
     // If a file was dropped before profiles finished loading, run analysis now.
     if (profiles.length > 0 && file && !profileAutoMatched && !analyseAttempted && !analysing && phase === 'ready') {
-      analyseFile(file);
+      analyseFile(file, selectedLocalPath);
     }
   });
 
-  async function analyseFile(f: File) {
+  async function analyseFile(f: File, sourcePath: string | null = null) {
     analysing = true;
     analyseAttempted = true;
     try {
-      const s = await suggestProfile(f);
+      const s = sourcePath ? await inspectLocalPath(sourcePath) : await suggestProfile(f);
       selectedProfile = s.profile_id;
       profileAutoMatched = true;
       alreadyConverted = s.already_converted;
@@ -220,8 +232,31 @@
     }
   }
 
-  async function onFile(f: File) {
+  async function chooseDesktopProject(): Promise<boolean> {
+    const api = desktopApi();
+    if (!api?.choose_project_file) return false;
+    try {
+      const picked = await api.choose_project_file();
+      if (picked.cancelled) return true;
+      if (!picked.ok || !picked.path || !picked.name) {
+        analyseError = picked.error || $tr('Could not read file - is this a valid .3mf file?');
+        phase = 'error';
+        return true;
+      }
+      await onFile(new File([], picked.name), picked.path, picked.size ?? null);
+      return true;
+    } catch (err) {
+      analyseError = err instanceof Error ? err.message : String(err);
+      phase = 'error';
+      return true;
+    }
+  }
+
+  async function onFile(f: File | null, sourcePath: string | null = null, sourceSize: number | null = null) {
     file = f;
+    selectedLocalPath = sourcePath;
+    selectedLocalName = sourcePath && f ? f.name : null;
+    selectedLocalSize = sourcePath && typeof sourceSize === 'number' ? sourceSize : null;
     phase = f ? 'ready' : 'idle';
     result = null;
     convertError = '';
@@ -237,7 +272,7 @@
     paintedSlotMap = {};
     detectedFilaments = [];
     if (f && profiles.length > 0) {
-      await analyseFile(f);
+      await analyseFile(f, sourcePath);
     }
   }
 
@@ -255,10 +290,9 @@
     paintedSlotMap = slotMap;
     phase = 'converting';
     convertError = '';
-    _startProgress(file.size);
+    _startProgress(selectedLocalSize ?? file.size);
     try {
-      result = await convert({
-        file,
+      const commonOptions = {
         reference_profile: selectedProfile,
         apply_rules: applyRules,
         clamp_speeds: true,
@@ -267,8 +301,10 @@
         advanced_overrides: advancedOverrides,
         slot_map: Object.keys(slotMap).length > 0 ? slotMap : undefined,
         exclude_object: excludeObjects,
-        source_directory: sourceDirectoryFor(file),
-      });
+      };
+      result = selectedLocalPath
+        ? await convertLocalPath({ ...commonOptions, source_path: selectedLocalPath })
+        : await convert({ ...commonOptions, file, source_directory: sourceDirectoryFor(file) });
       _stopProgress();
       convertProgress = 100;
       await new Promise(r => setTimeout(r, 350));
@@ -289,6 +325,9 @@
     try {
       result = await getJob(jobId);
       file = null;
+      selectedLocalPath = null;
+      selectedLocalName = null;
+      selectedLocalSize = null;
       phase = 'done';
     } catch (e: unknown) {
       result = null;
@@ -352,6 +391,9 @@
       history.replaceState(null, '', window.location.pathname + window.location.search);
     }
     file = null;
+    selectedLocalPath = null;
+    selectedLocalName = null;
+    selectedLocalSize = null;
     result = null;
     convertError = '';
     analyseError = '';
@@ -381,7 +423,7 @@
         <span class="brand-copy">
           <span class="brand-name">MkWorld2Snap</span>
           <span class="brand-tag">{$tr('print file workshop')}</span>
-          <span class="brand-version">v1.0.7</span>
+          <span class="brand-version">v1.0.8</span>
         </span>
       </button>
       <div class="wordmark-tooltip" role="tooltip">
@@ -537,7 +579,10 @@
           <div class="intake-column">
             <IntakeDeck
               onfile={onFile}
+              onpick={chooseDesktopProject}
               bind:file
+              localName={selectedLocalName}
+              localSize={selectedLocalSize}
               disabled={phase === 'converting' || analysing}
             />
 
@@ -585,6 +630,7 @@
               {#key `${file.name}-${file.size}-${file.lastModified}`}
                 <ScenePreview
                   {file}
+                  sourcePath={selectedLocalPath}
                   compact
                   eyebrow={$tr('3D intake preview')}
                   heading={$tr('Loaded layout')}
