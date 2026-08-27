@@ -32,7 +32,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 import yaml
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -848,14 +848,14 @@ def inspect_desktop_file(payload: LocalPathPayload) -> dict[str, Any]:
     return _inspect_3mf_path(local_00, job_id=uuid.uuid4().hex, workdir=None, endpoint='/engine/desktop/intake/inspect', display_name=local_00.name)
 
 @app.post('/engine/intake/scene')
-async def intake_scene(file: UploadFile=File(...)) -> JSONResponse:
+async def intake_scene(file: UploadFile=File(...), max_triangles: int=Query(700000, ge=1000, le=700000)) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith('.3mf'):
         raise HTTPException(400, detail='expected a .3mf upload')
     with tempfile.TemporaryDirectory(dir=TMP_DIR) as local_00:
         local_01 = Path(local_00) / file.filename
         _save_upload(file, local_01, size_limit_bytes=MAX_UPLOAD_MB * 1024 * 1024)
         try:
-            return JSONResponse(build_preview_scene(local_01))
+            return JSONResponse(build_preview_scene(local_01, max_triangles=max_triangles))
         except ProfileLoadError as err:
             raise HTTPException(400, detail=str(err)) from err
         except Exception as err:
@@ -863,10 +863,10 @@ async def intake_scene(file: UploadFile=File(...)) -> JSONResponse:
             raise HTTPException(500, detail=f'scene extraction failed: {err}') from err
 
 @app.post('/engine/desktop/intake/scene')
-def desktop_intake_scene(payload: LocalPathPayload) -> JSONResponse:
+def desktop_intake_scene(payload: LocalPathPayload, max_triangles: int=Query(700000, ge=1000, le=700000)) -> JSONResponse:
     local_00 = _validate_desktop_3mf_path(payload.source_path)
     try:
-        return JSONResponse(build_preview_scene(local_00))
+        return JSONResponse(build_preview_scene(local_00, max_triangles=max_triangles))
     except ProfileLoadError as err:
         raise HTTPException(400, detail=str(err)) from err
     except Exception as err:

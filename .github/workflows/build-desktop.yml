@@ -6,7 +6,7 @@ on:
       version:
         description: "Release/build version without leading v"
         required: true
-        default: "1.0.8"
+        default: "1.0.9"
       create_release:
         description: "Create or update a GitHub release with the built artifacts"
         required: true
@@ -264,7 +264,7 @@ jobs:
           set -euo pipefail
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             version="${GITHUB_REF_NAME#v}"
-            notes="Fixes desktop source-folder saving and Auto Output folder selection. Includes macOS universal2, Windows x64, and Linux x64 packages."
+            notes="Improves import responsiveness for detailed 3MF files by using a lighter initial 3D preview while keeping full conversion behavior intact. Includes macOS universal2, Windows x64, and Linux x64 packages."
           else
             version="${{ inputs.version }}"
             notes="${{ inputs.release_notes }}"

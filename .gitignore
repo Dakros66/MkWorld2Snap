@@ -22,6 +22,9 @@ dist/
 build_logs/
 .tools/
 desktop_data/
+settings.json
+conversion_history.json
+filament_library_cache.json
 
 # packaged release outputs
 release/

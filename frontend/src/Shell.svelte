@@ -423,7 +423,7 @@
         <span class="brand-copy">
           <span class="brand-name">MkWorld2Snap</span>
           <span class="brand-tag">{$tr('print file workshop')}</span>
-          <span class="brand-version">v1.0.8</span>
+          <span class="brand-version">v1.0.9</span>
         </span>
       </button>
       <div class="wordmark-tooltip" role="tooltip">
@@ -631,6 +631,7 @@
                 <ScenePreview
                   {file}
                   sourcePath={selectedLocalPath}
+                  maxTriangles={80000}
                   compact
                   eyebrow={$tr('3D intake preview')}
                   heading={$tr('Loaded layout')}

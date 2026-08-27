@@ -396,15 +396,17 @@ export async function jobParameters(jobId: string): Promise<JobParameters> {
   return handle(await fetch(`/engine/jobs/${encodeURIComponent(jobId)}/parameters`));
 }
 
-export async function previewUploadScene(file: File): Promise<PreviewScene> {
+export async function previewUploadScene(file: File, maxTriangles?: number): Promise<PreviewScene> {
   const form = new FormData();
   form.append('file', file);
-  return handle(await fetch('/engine/intake/scene', { method: 'POST', body: form }));
+  const url = maxTriangles ? `/engine/intake/scene?max_triangles=${encodeURIComponent(String(maxTriangles))}` : '/engine/intake/scene';
+  return handle(await fetch(url, { method: 'POST', body: form }));
 }
 
-export async function previewLocalPathScene(sourcePath: string): Promise<PreviewScene> {
+export async function previewLocalPathScene(sourcePath: string, maxTriangles?: number): Promise<PreviewScene> {
+  const url = maxTriangles ? `/engine/desktop/intake/scene?max_triangles=${encodeURIComponent(String(maxTriangles))}` : '/engine/desktop/intake/scene';
   return handle(
-    await fetch('/engine/desktop/intake/scene', {
+    await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source_path: sourcePath }),

@@ -11,6 +11,7 @@
     sourceJob?: boolean;
     file?: File | null;
     sourcePath?: string | null;
+    maxTriangles?: number;
     compact?: boolean;
     heading?: string;
     eyebrow?: string;
@@ -21,6 +22,7 @@
     sourceJob = false,
     file = null,
     sourcePath = null,
+    maxTriangles,
     compact = false,
     heading = 'Plate layout',
     eyebrow = '3D build preview',
@@ -64,9 +66,9 @@
       if (jobId) {
         sceneData = sourceJob ? await previewSourceScene(jobId) : await previewScene(jobId);
       } else if (sourcePath) {
-        sceneData = await previewLocalPathScene(sourcePath);
+        sceneData = await previewLocalPathScene(sourcePath, maxTriangles);
       } else if (file) {
-        sceneData = await previewUploadScene(file);
+        sceneData = await previewUploadScene(file, maxTriangles);
       } else {
         sceneData = null;
       }
