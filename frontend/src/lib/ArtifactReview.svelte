@@ -11,10 +11,11 @@
     diff: DiffPayload;
     jobId: string;
     downloadName: string;
+    saveDirectory?: string | null;
     onreset: () => void;
   }
 
-  let { diff, jobId, downloadName, onreset }: Props = $props();
+  let { diff, jobId, downloadName, saveDirectory = null, onreset }: Props = $props();
 
   type ParamMode = 'keep' | 'default' | 'custom';
   type EditableParam = { key: string; current: unknown; source: string; defaultValue?: unknown; editable?: boolean; changed?: boolean };
@@ -22,9 +23,11 @@
   const initialDiff = () => diff;
   const initialJobId = () => jobId;
   const initialDownloadName = () => downloadName;
+  const initialSaveDirectory = () => saveDirectory;
   let activeDiff = $state(initialDiff());
   let activeJobId = $state(initialJobId());
   let activeDownloadName = $state(initialDownloadName());
+  let activeSaveDirectory = $state(initialSaveDirectory());
   let expanded = $state<Set<number>>(new Set());
   let saveStatus = $state('');
   let saving = $state(false);
@@ -46,7 +49,9 @@
   let backendSaveDialogAvailable = $state(false);
   let saveMenuOpen = $state<'' | 'header' | 'dock'>('');
   let nativeCapabilityChecked = $state(false);
+  let preferSourceSaveFolder = $state(localStorage.getItem('mkworld2snap.save.start') !== 'downloads');
   let canNativeSave = $derived(hasNativeSave || backendSaveDialogAvailable);
+  let preferredSaveDirectory = $derived(preferSourceSaveFolder ? activeSaveDirectory : null);
   const saveStatusIsError = $derived(
     /\b(fail|failed|error|not found|expired|cleaned|could not|download failed)\b/i.test(saveStatus)
   );
@@ -66,6 +71,7 @@
     activeDiff = diff;
     activeJobId = jobId;
     activeDownloadName = downloadName;
+    activeSaveDirectory = saveDirectory;
     const exclude = inferExcludeObject(diff);
     reviewExcludeObjects = exclude;
     baselineExcludeObjects = exclude;
@@ -408,6 +414,7 @@
       activeDiff = next.diff;
       activeJobId = next.job_id;
       activeDownloadName = next.download_name;
+      activeSaveDirectory = next.save_directory ?? activeSaveDirectory;
       baselineExcludeObjects = reviewExcludeObjects;
       paramModes = {};
       customValues = {};
@@ -456,9 +463,15 @@
       save_converted_file?: (
         jobId: string,
         downloadName: string,
+        preferredDirectory?: string | null,
       ) => Promise<{ ok: boolean; path?: string; error?: string; cancelled?: boolean; revealed?: boolean }>;
     };
   };
+
+  function setPreferSourceSaveFolder(value: boolean) {
+    preferSourceSaveFolder = value;
+    localStorage.setItem('mkworld2snap.save.start', value ? 'source' : 'downloads');
+  }
 
   async function waitForDesktopBridge(timeoutMs = 5000): Promise<DesktopBridge | undefined> {
     const current = (window as unknown as { pywebview?: DesktopBridge }).pywebview;
@@ -551,9 +564,9 @@
     let result: { ok: boolean; path?: string; error?: string; cancelled?: boolean; revealed?: boolean } | undefined;
     if (pywebview?.api?.save_converted_file) {
       hasNativeSave = true;
-      result = await pywebview.api.save_converted_file(activeJobId, activeDownloadName);
+      result = await pywebview.api.save_converted_file(activeJobId, activeDownloadName, preferredSaveDirectory);
     } else if (backendSaveDialogAvailable) {
-      result = await saveAs(activeJobId);
+      result = await saveAs(activeJobId, preferredSaveDirectory);
     } else {
       return 'unavailable';
     }
@@ -717,6 +730,13 @@
               <Download size={15} strokeWidth={2.4} aria-hidden="true" />
               {$i18n('Download through browser')}
             </button>
+            <label class="save-menu-option" title={activeSaveDirectory ? activeSaveDirectory : $i18n('Source folder is not available for this file')}>
+              <input type="checkbox" checked={preferSourceSaveFolder} onchange={(event) => setPreferSourceSaveFolder(event.currentTarget.checked)} />
+              <span>
+                <strong>{$i18n('Start save dialog in source folder')}</strong>
+                <small>{activeSaveDirectory ? activeSaveDirectory : $i18n('Falls back to Downloads when the source folder is unknown')}</small>
+              </span>
+            </label>
           </div>
         {/if}
       </div>
@@ -1135,6 +1155,13 @@
             <Download size={15} strokeWidth={2.4} aria-hidden="true" />
             {$i18n('Download through browser')}
           </button>
+          <label class="save-menu-option" title={activeSaveDirectory ? activeSaveDirectory : $i18n('Source folder is not available for this file')}>
+            <input type="checkbox" checked={preferSourceSaveFolder} onchange={(event) => setPreferSourceSaveFolder(event.currentTarget.checked)} />
+            <span>
+              <strong>{$i18n('Start save dialog in source folder')}</strong>
+              <small>{activeSaveDirectory ? activeSaveDirectory : $i18n('Falls back to Downloads when the source folder is unknown')}</small>
+            </span>
+          </label>
         </div>
       {/if}
     </div>
@@ -1884,6 +1911,45 @@
 
   .save-menu button:hover:not(:disabled) {
     background: color-mix(in srgb, var(--mint) 18%, transparent);
+  }
+
+  .save-menu-option {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 9px;
+    align-items: flex-start;
+    margin-top: 4px;
+    padding: 10px 12px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .save-menu-option input {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: var(--accent);
+  }
+
+  .save-menu-option span {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .save-menu-option strong {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .save-menu-option small {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .save-menu button:disabled {

@@ -90,6 +90,16 @@
   let batchError = $state('');
   let batchResults = $state<Array<{ name: string; status: 'done' | 'failed' | 'skipped'; message: string; jobId?: string }>>([]);
 
+  type FileWithRuntimePath = File & { path?: string; mozFullPath?: string };
+
+  function sourceDirectoryFor(entry: File | null): string | null {
+    if (!entry) return null;
+    const fullPath = (entry as FileWithRuntimePath).path || (entry as FileWithRuntimePath).mozFullPath || '';
+    if (!fullPath || typeof fullPath !== 'string') return null;
+    const lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+    return lastSlash > 0 ? fullPath.slice(0, lastSlash) : null;
+  }
+
   // build controls
   let selectedProfile = $state('');
   let profileAutoMatched = $state(false);
@@ -257,6 +267,7 @@
         advanced_overrides: advancedOverrides,
         slot_map: Object.keys(slotMap).length > 0 ? slotMap : undefined,
         exclude_object: excludeObjects,
+        source_directory: sourceDirectoryFor(file),
       });
       _stopProgress();
       convertProgress = 100;
@@ -312,6 +323,7 @@
             advanced_overrides: advancedOverrides,
             insert_swap_pauses: inspected.filaments.length > 4 && !inspected.is_painted_model,
             exclude_object: excludeObjects,
+            source_directory: sourceDirectoryFor(entry),
           });
           batchResults = batchResults.map((row, rowIndex) => rowIndex === index ? {
             ...row,
@@ -369,7 +381,7 @@
         <span class="brand-copy">
           <span class="brand-name">MkWorld2Snap</span>
           <span class="brand-tag">{$tr('print file workshop')}</span>
-          <span class="brand-version">v1.0.5</span>
+          <span class="brand-version">v1.0.6</span>
         </span>
       </button>
       <div class="wordmark-tooltip" role="tooltip">
@@ -508,6 +520,7 @@
           diff={result.diff}
           jobId={result.job_id}
           downloadName={result.download_name}
+          saveDirectory={result.save_directory ?? null}
           onreset={reset}
         />
 

@@ -1,10 +1,13 @@
 <script module lang="ts">
+  import type { WatchStatus as WatchStatusShape } from './engineClient';
+
   declare global {
     interface Window {
       pywebview?: {
         api?: {
           autostart_status?: () => Promise<{ supported: boolean; enabled: boolean; path?: string; error?: string }>;
           set_autostart?: (enabled: boolean) => Promise<{ supported: boolean; enabled: boolean; path?: string; error?: string }>;
+          choose_watch_folders?: () => Promise<WatchStatusShape & { ok: boolean; cancelled?: boolean; error?: string }>;
         };
       };
     }
@@ -14,6 +17,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
+    addWatchFolders,
     chooseWatchFolders,
     folderWatchStatus,
     ignoreWatchFile,
@@ -38,6 +42,7 @@
   let search = $state('');
   let filter = $state<'all' | 'converted' | 'failed' | 'unsupported' | 'ignored'>('all');
   let visibleLimit = $state(20);
+  let manualPath = $state('');
 
   const recent = $derived((status?.recent ?? []).filter((item) => {
     const matchesFilter = filter === 'all' || item.status === filter;
@@ -74,8 +79,14 @@
     busy = true;
     error = '';
     try {
-      const next = await chooseWatchFolders();
-      if (!next.cancelled) status = next;
+      const api = desktopApi();
+      const next = api?.choose_watch_folders ? await api.choose_watch_folders() : await chooseWatchFolders();
+      if (next.cancelled) {
+        if (next.error) error = next.error;
+        else if (!api?.choose_watch_folders) error = $tr('Folder picking is only available from the desktop app on this platform.');
+      } else {
+        status = next;
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -112,6 +123,25 @@
     error = '';
     try {
       status = await scanWatchFolders();
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function addManualPath(event: SubmitEvent) {
+    event.preventDefault();
+    const path = manualPath.trim();
+    if (!path) return;
+    busy = true;
+    error = '';
+    try {
+      const next = await addWatchFolders([path]);
+      if (!next.cancelled) {
+        status = next;
+        manualPath = '';
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -270,6 +300,19 @@
   {#if error}
     <div class="watch-error" role="alert">{error}</div>
   {/if}
+
+  <form class="watch-manual-path" onsubmit={addManualPath}>
+    <input
+      type="text"
+      bind:value={manualPath}
+      placeholder={$tr('Folder path on this computer or server')}
+      aria-label={$tr('Folder path on this computer or server')}
+    />
+    <button class="ghost" type="submit" disabled={busy || !manualPath.trim()}>
+      <FolderPlus size={15} strokeWidth={2.4} aria-hidden="true" />
+      {$tr('Add path')}
+    </button>
+  </form>
 
   {#if status?.paths.length}
     <div class="watch-paths" aria-label={$tr('Watched folders')}>
@@ -477,6 +520,32 @@
     color: #fffdf8;
     background: var(--accent);
     border-color: var(--ink);
+  }
+
+  .watch-manual-path {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .watch-manual-path input {
+    min-width: 0;
+    min-height: 40px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  .watch-manual-path button {
+    min-height: 40px;
+    padding: 9px 12px;
+    font-weight: 900;
   }
 
   .icon-only {
@@ -822,6 +891,10 @@
 
     .watch-button {
       flex: 1 1 auto;
+    }
+
+    .watch-manual-path {
+      grid-template-columns: 1fr;
     }
 
     .watch-row {

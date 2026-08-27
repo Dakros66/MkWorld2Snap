@@ -129,9 +129,17 @@ def _failed_diagnostics() -> list[dict[str, Any]]:
         rows.append(payload)
     return rows[:50]
 
-def _register_job(job_id: str, output_path: Path, diff_payload: dict, *, source_path: Path | None=None, reference_path: Path | None=None, settings: BuildRequestSettings | None=None) -> None:
+def _register_job(job_id: str, output_path: Path, diff_payload: dict, *, source_path: Path | None=None, reference_path: Path | None=None, settings: BuildRequestSettings | None=None, source_origin_dir: Path | None=None) -> None:
     with _JOBS_LOCK:
-        _JOBS[job_id] = {'output_path': output_path, 'diff': diff_payload, 'created_at': time.time(), 'source_path': source_path, 'reference_path': reference_path, 'settings': settings}
+        _JOBS[job_id] = {
+            'output_path': output_path,
+            'diff': diff_payload,
+            'created_at': time.time(),
+            'source_path': source_path,
+            'reference_path': reference_path,
+            'settings': settings,
+            'source_origin_dir': source_origin_dir,
+        }
     try:
         report = diff_payload.get('report', {}) if isinstance(diff_payload, dict) else {}
         counts = diff_payload.get('counts', {}) if isinstance(diff_payload, dict) else {}
@@ -145,6 +153,7 @@ def _register_job(job_id: str, output_path: Path, diff_payload: dict, *, source_
             'output_filename': report.get('output_filename') or output_path.name,
             'output_path': str(output_path),
             'source_path': str(source_path) if source_path else None,
+            'source_origin_dir': str(source_origin_dir) if source_origin_dir else None,
             'reference_profile': profile,
             'created_at': time.time(),
             'counts': counts,
@@ -163,18 +172,35 @@ def _ensure_3mf_suffix(path: Path) -> Path:
 def _applescript_string(value: str) -> str:
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
-def _choose_save_path(suggested_name: str) -> Path | None:
+def _applescript_folder_alias(path: Path) -> str:
+    local_00 = str(path)
+    if not local_00.endswith('/'):
+        local_00 += '/'
+    return '(POSIX file ' + _applescript_string(local_00) + ' as alias)'
+
+def _choose_save_path(suggested_name: str, preferred_dir: Path | None=None) -> Path | None:
     if os.environ.get('MKWORLD2SNAP_SAVE_DIALOG', '1') == '0':
         return None
     local_00 = Path(suggested_name or 'converted.3mf').name
+    local_01 = preferred_dir if preferred_dir and preferred_dir.is_dir() else None
     if sys.platform == 'darwin':
-        local_01 = '\n'.join([f'set defaultName to {_applescript_string(local_00)}', 'set defaultFolder to (path to downloads folder)', 'set chosenFile to choose file name with prompt "Save converted 3MF as:" default name defaultName default location defaultFolder', 'POSIX path of chosenFile'])
-        local_02 = subprocess.run(['osascript', '-e', local_01], capture_output=True, text=True, check=False)
-        if local_02.returncode != 0:
+        local_02 = 'set defaultFolder to ' + _applescript_folder_alias(local_01) if local_01 else 'set defaultFolder to (path to downloads folder)'
+        local_03 = '\n'.join([f'set defaultName to {_applescript_string(local_00)}', local_02, 'set chosenFile to choose file name with prompt "Save converted 3MF as:" default name defaultName default location defaultFolder', 'POSIX path of chosenFile'])
+        local_04 = subprocess.run(['osascript', '-e', local_03], capture_output=True, text=True, check=False)
+        if local_04.returncode != 0:
             return None
-        local_03 = local_02.stdout.strip()
-        return _ensure_3mf_suffix(Path(local_03)) if local_03 else None
+        local_05 = local_04.stdout.strip()
+        return _ensure_3mf_suffix(Path(local_05)) if local_05 else None
     return None
+
+def _source_origin_dir(raw: str | None) -> Path | None:
+    if not raw or not raw.strip():
+        return None
+    try:
+        path = Path(raw).expanduser()
+        return path if path.is_dir() else None
+    except Exception:
+        return None
 
 def _reveal_saved_file(path: Path) -> bool:
     if os.environ.get('MKWORLD2SNAP_REVEAL_SAVED', '1') == '0':
@@ -333,6 +359,9 @@ class WatchTogglePayload(BaseModel):
 class WatchPathPayload(BaseModel):
     path: str
 
+class WatchPathsPayload(BaseModel):
+    paths: list[str]
+
 class PathActionPayload(BaseModel):
     path: str
 
@@ -340,6 +369,9 @@ class RebuildPayload(BaseModel):
     custom_overrides: dict[str, Any] = {}
     default_keys: list[str] = []
     exclude_object: bool | None = None
+
+class SaveDialogPayload(BaseModel):
+    preferred_directory: str | None = None
 
 def _parameter_group(key: str) -> str:
     local_00 = key.lower()
@@ -566,6 +598,14 @@ def folder_watch_select() -> JSONResponse:
     local_01 = _FOLDER_WATCH.add_paths(local_00)
     return JSONResponse({'ok': True, **local_01})
 
+@app.post('/engine/folder-watch/add')
+def folder_watch_add(payload: WatchPathsPayload) -> JSONResponse:
+    local_00 = [Path(local_01).expanduser() for local_01 in payload.paths if isinstance(local_01, str) and local_01.strip()]
+    if not local_00:
+        return JSONResponse({'ok': False, 'cancelled': True, **_FOLDER_WATCH.status()})
+    local_02 = _FOLDER_WATCH.add_paths(local_00)
+    return JSONResponse({'ok': True, **local_02})
+
 @app.post('/engine/folder-watch/enabled')
 def folder_watch_enabled(payload: WatchTogglePayload) -> JSONResponse:
     return JSONResponse(_FOLDER_WATCH.set_enabled(payload.enabled))
@@ -783,7 +823,7 @@ async def intake_scene(file: UploadFile=File(...)) -> JSONResponse:
             raise HTTPException(500, detail=f'scene extraction failed: {err}') from err
 
 @app.post('/engine/jobs/u1')
-async def build_u1_job(file: UploadFile=File(...), reference_profile: str=Form(...), apply_recipe_book: bool=Form(True), clamp_speeds: bool=Form(True), preserve_color_painting: bool=Form(True), advanced_overrides: str=Form('{}'), slot_map: str=Form('{}'), insert_swap_pauses: str=Form('false'), exclude_object: str=Form('true')) -> JSONResponse:
+async def build_u1_job(file: UploadFile=File(...), reference_profile: str=Form(...), apply_recipe_book: bool=Form(True), clamp_speeds: bool=Form(True), preserve_color_painting: bool=Form(True), advanced_overrides: str=Form('{}'), slot_map: str=Form('{}'), insert_swap_pauses: str=Form('false'), exclude_object: str=Form('true'), source_directory: str=Form('')) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith('.3mf'):
         raise HTTPException(400, detail='expected a .3mf upload')
     try:
@@ -809,6 +849,7 @@ async def build_u1_job(file: UploadFile=File(...), reference_profile: str=Form(.
     local_08 = TMP_DIR / local_07
     local_08.mkdir(parents=True)
     local_09 = local_08 / file.filename
+    local_17 = _source_origin_dir(source_directory)
     _save_upload(file, local_09, size_limit_bytes=MAX_UPLOAD_MB * 1024 * 1024)
     local_10 = f'{Path(file.filename).stem}-U1.3mf'
     local_11 = local_08 / local_10
@@ -825,8 +866,8 @@ async def build_u1_job(file: UploadFile=File(...), reference_profile: str=Form(.
         raise HTTPException(500, detail=f'conversion failed: {err}') from err
     local_15 = local_14.diff.counts()
     local_16 = {'report': local_14.diff.model_dump(), 'sections': compose_report_sections(local_14.diff), 'counts': local_15}
-    _register_job(local_07, local_11, local_16, source_path=local_09, reference_path=Path(local_06.path), settings=local_12)
-    return JSONResponse({'job_id': local_07, 'download_name': local_10, 'diff': local_16})
+    _register_job(local_07, local_11, local_16, source_path=local_09, reference_path=Path(local_06.path), settings=local_12, source_origin_dir=local_17)
+    return JSONResponse({'job_id': local_07, 'download_name': local_10, 'diff': local_16, 'save_directory': str(local_17) if local_17 else None})
 
 def _coerce_override_value(key: str, raw_value: Any, reference_value: Any) -> Any:
     if isinstance(reference_value, list):
@@ -912,8 +953,8 @@ def rebuild_u1_job(job_id: str, payload: RebuildPayload) -> JSONResponse:
         logger.exception('rebuild failed')
         raise HTTPException(500, detail=f'rebuild failed: {err}') from err
     local_15 = {'report': local_14.diff.model_dump(), 'sections': compose_report_sections(local_14.diff), 'counts': local_14.diff.counts()}
-    _register_job(local_10, local_13, local_15, source_path=local_12, reference_path=local_02, settings=local_09)
-    return JSONResponse({'job_id': local_10, 'download_name': local_13.name, 'diff': local_15})
+    _register_job(local_10, local_13, local_15, source_path=local_12, reference_path=local_02, settings=local_09, source_origin_dir=local_00.get('source_origin_dir'))
+    return JSONResponse({'job_id': local_10, 'download_name': local_13.name, 'diff': local_15, 'save_directory': str(local_00.get('source_origin_dir')) if local_00.get('source_origin_dir') else None})
 
 @app.post('/engine/jobs/target-profile')
 async def build_target_profile_job(file: UploadFile=File(...), reference_profile: str=Form(...), apply_recipe_book: bool=Form(True), clamp_speeds: bool=Form(True), preserve_color_painting: bool=Form(True), advanced_overrides: str=Form('{}'), insert_swap_pauses: str=Form('false')) -> JSONResponse:
@@ -978,7 +1019,8 @@ def job_summary(job_id: str) -> JSONResponse:
     local_01: Path = local_00['output_path']
     if not local_01.exists():
         raise HTTPException(410, detail='output file was cleaned up')
-    return JSONResponse({'job_id': job_id, 'download_name': local_01.name, 'diff': local_00['diff']})
+    local_02 = local_00.get('source_origin_dir')
+    return JSONResponse({'job_id': job_id, 'download_name': local_01.name, 'diff': local_00['diff'], 'save_directory': str(local_02) if local_02 else None})
 
 @app.get('/engine/jobs/{job_id}/scene')
 def job_scene(job_id: str) -> JSONResponse:
@@ -1038,14 +1080,15 @@ def job_parameters(job_id: str) -> JSONResponse:
     })
 
 @app.post('/engine/jobs/{job_id}/save-dialog')
-def save_job_with_dialog(job_id: str) -> JSONResponse:
+def save_job_with_dialog(job_id: str, payload: SaveDialogPayload | None = None) -> JSONResponse:
     local_00 = _get_job(job_id)
     if local_00 is None:
         raise HTTPException(404, detail='job expired or not found')
     local_01: Path = local_00['output_path']
     if not local_01.exists():
         raise HTTPException(410, detail='output file was cleaned up')
-    local_02 = _choose_save_path(local_01.name)
+    local_04 = _source_origin_dir(payload.preferred_directory) if payload is not None else local_00.get('source_origin_dir')
+    local_02 = _choose_save_path(local_01.name, local_04)
     if local_02 is None:
         return JSONResponse({'ok': False, 'cancelled': True})
     local_02.parent.mkdir(parents=True, exist_ok=True)

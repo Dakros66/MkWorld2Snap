@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import plistlib
 import shutil
@@ -302,7 +303,14 @@ class NativeWindowBridge:
         self.data_root = data_root
 
     @staticmethod
-    def _save_start_dir() -> Path:
+    def _save_start_dir(preferred_directory: str | None = None) -> Path:
+        if preferred_directory:
+            try:
+                preferred = Path(preferred_directory).expanduser()
+                if preferred.is_dir():
+                    return preferred
+            except Exception:
+                pass
         downloads = Path.home() / "Downloads"
         return downloads if downloads.is_dir() else Path.home()
 
@@ -327,7 +335,7 @@ class NativeWindowBridge:
         except Exception:
             return False
 
-    def save_converted_file(self, job_id: str, suggested_name: str) -> dict[str, Any]:
+    def save_converted_file(self, job_id: str, suggested_name: str, preferred_directory: str | None = None) -> dict[str, Any]:
         try:
             import webview
 
@@ -338,7 +346,7 @@ class NativeWindowBridge:
             filename = Path(suggested_name or "converted.3mf").name
             selection = window.create_file_dialog(
                 webview.SAVE_DIALOG,
-                directory=str(self._save_start_dir()),
+                directory=str(self._save_start_dir(preferred_directory)),
                 save_filename=filename,
                 file_types=("3MF project (*.3mf)", "All files (*.*)"),
             )
@@ -407,6 +415,43 @@ class NativeWindowBridge:
             return {"ok": True, "path": str(self.data_root)}
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": str(exc), "path": str(self.data_root)}
+
+    def choose_watch_folders(self) -> dict[str, Any]:
+        try:
+            import webview
+
+            window = webview.windows[0] if webview.windows else None
+            if window is None:
+                return {"ok": False, "cancelled": True, "error": "No desktop window is available."}
+
+            try:
+                selection = window.create_file_dialog(
+                    webview.FOLDER_DIALOG,
+                    directory=str(Path.home()),
+                    allow_multiple=True,
+                )
+            except TypeError:
+                selection = window.create_file_dialog(
+                    webview.FOLDER_DIALOG,
+                    directory=str(Path.home()),
+                )
+            if not selection:
+                return {"ok": False, "cancelled": True}
+
+            raw_paths = selection if isinstance(selection, (list, tuple)) else [selection]
+            payload = json.dumps({"paths": [str(Path(item)) for item in raw_paths]}).encode("utf-8")
+            request = urllib.request.Request(
+                f"{self.engine_url}/engine/folder-watch/add",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            return {"ok": False, "error": f"Folder selection failed: HTTP {exc.code}"}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
 
     @staticmethod
     def _launch_command() -> list[str]:

@@ -6,7 +6,7 @@ on:
       version:
         description: "Release/build version without leading v"
         required: true
-        default: "1.0.5"
+        default: "1.0.6"
       create_release:
         description: "Create or update a GitHub release with the built artifacts"
         required: true
@@ -264,7 +264,7 @@ jobs:
           set -euo pipefail
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             version="${GITHUB_REF_NAME#v}"
-            notes="Fixes Docker automatic conversions by keeping bundled U1 reference profiles inside the container image. Includes macOS universal2, Windows x64, and Linux x64 packages."
+            notes="Improves desktop Save 3MF behavior, adds source-folder save preference, and fixes Auto Output folder selection for desktop and Docker/remote use. Includes macOS universal2, Windows x64, and Linux x64 packages."
           else
             version="${{ inputs.version }}"
             notes="${{ inputs.release_notes }}"

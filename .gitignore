@@ -48,6 +48,8 @@ target_profiles/*
 
 # editors / os
 .DS_Store
+Thumbs.db
+Desktop.ini
 .idea/
 .vscode/
 

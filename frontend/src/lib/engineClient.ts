@@ -51,6 +51,7 @@ export interface DiffPayload {
 export interface ConvertResult {
   job_id: string;
   download_name: string;
+  save_directory?: string | null;
   diff: DiffPayload;
 }
 
@@ -285,6 +286,7 @@ export interface ConvertOptions {
   slot_map?: Record<number, number>;
   insert_swap_pauses: boolean;
   exclude_object: boolean;
+  source_directory?: string | null;
 }
 
 export async function convert(opts: ConvertOptions): Promise<ConvertResult> {
@@ -298,6 +300,7 @@ export async function convert(opts: ConvertOptions): Promise<ConvertResult> {
   form.append('slot_map', JSON.stringify(opts.slot_map ?? {}));
   form.append('insert_swap_pauses', String(opts.insert_swap_pauses));
   form.append('exclude_object', String(opts.exclude_object));
+  if (opts.source_directory) form.append('source_directory', opts.source_directory);
   return handle(await fetch('/engine/jobs/u1', { method: 'POST', body: form }));
 }
 
@@ -350,9 +353,13 @@ export async function previewUploadScene(file: File): Promise<PreviewScene> {
   return handle(await fetch('/engine/intake/scene', { method: 'POST', body: form }));
 }
 
-export async function saveAs(jobId: string): Promise<{ ok: boolean; path?: string; revealed?: boolean; cancelled?: boolean }> {
+export async function saveAs(jobId: string, preferredDirectory?: string | null): Promise<{ ok: boolean; path?: string; revealed?: boolean; cancelled?: boolean }> {
   return handle(
-    await fetch(`/engine/jobs/${encodeURIComponent(jobId)}/save-dialog`, { method: 'POST' }),
+    await fetch(`/engine/jobs/${encodeURIComponent(jobId)}/save-dialog`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preferred_directory: preferredDirectory ?? '' }),
+    }),
   );
 }
 
@@ -373,8 +380,18 @@ export async function folderWatchStatus(): Promise<WatchStatus> {
   return handle(await fetch('/engine/folder-watch'));
 }
 
-export async function chooseWatchFolders(): Promise<(WatchStatus & { ok: boolean; cancelled?: boolean })> {
+export async function chooseWatchFolders(): Promise<(WatchStatus & { ok: boolean; cancelled?: boolean; error?: string })> {
   return handle(await fetch('/engine/folder-watch/select', { method: 'POST' }));
+}
+
+export async function addWatchFolders(paths: string[]): Promise<(WatchStatus & { ok: boolean; cancelled?: boolean; error?: string })> {
+  return handle(
+    await fetch('/engine/folder-watch/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths }),
+    }),
+  );
 }
 
 export async function setFolderWatchEnabled(enabled: boolean): Promise<WatchStatus> {
